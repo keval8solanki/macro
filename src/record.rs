@@ -1,38 +1,76 @@
 use crate::event::SerializableEvent;
 use anyhow::Result;
-use rdev::{listen, Event, Key};
+use rdev::{listen, Event, EventType, Key};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-pub fn run_record(output_path: PathBuf) -> Result<()> {
-    println!("Recording... Press Esc to stop.");
+struct RecorderState {
+    is_recording: bool,
+    cmd_pressed: bool,
+    alt_pressed: bool,
+    events: Vec<SerializableEvent>,
+    last_time: SystemTime,
+}
 
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let last_time = Arc::new(Mutex::new(SystemTime::now()));
-    
-    let events_clone = events.clone();
-    let last_time_clone = last_time.clone();
+pub fn run_record(output_path: PathBuf) -> Result<()> {
+    println!("Running in background.");
+    println!("Start Recording: Cmd + Option + R");
+    println!("Stop Recording: Cmd + Option + Esc");
+
+    let state = Arc::new(Mutex::new(RecorderState {
+        is_recording: false,
+        cmd_pressed: false,
+        alt_pressed: false,
+        events: Vec::new(),
+        last_time: SystemTime::now(),
+    }));
+
+    let state_clone = state.clone();
     let output_path_clone = output_path.clone();
 
     let callback = move |event: Event| {
-        let mut last_time_guard = last_time_clone.lock().unwrap();
-        let now = SystemTime::now();
-        let delay = now.duration_since(*last_time_guard).unwrap().as_millis() as u64;
-        *last_time_guard = now;
-
-        if let Some(serializable_event) = SerializableEvent::from_rdev(event.clone(), delay) {
-            events_clone.lock().unwrap().push(serializable_event);
+        let mut state = state_clone.lock().unwrap();
+        
+        // Update modifier keys
+        match event.event_type {
+            EventType::KeyPress(Key::MetaLeft) | EventType::KeyPress(Key::MetaRight) => state.cmd_pressed = true,
+            EventType::KeyRelease(Key::MetaLeft) | EventType::KeyRelease(Key::MetaRight) => state.cmd_pressed = false,
+            EventType::KeyPress(Key::Alt) | EventType::KeyPress(Key::AltGr) => state.alt_pressed = true,
+            EventType::KeyRelease(Key::Alt) | EventType::KeyRelease(Key::AltGr) => state.alt_pressed = false,
+            _ => {}
         }
 
-        if let rdev::EventType::KeyPress(Key::Escape) = event.event_type {
-            println!("Stopping recording...");
-            let file = File::create(&output_path_clone).expect("Failed to create file");
-            let events_guard = events_clone.lock().unwrap();
-            serde_json::to_writer_pretty(file, &*events_guard).expect("Failed to write to file");
-            println!("Saved to {:?}", output_path_clone);
-            std::process::exit(0);
+        // Check for Hotkeys
+        if state.cmd_pressed && state.alt_pressed {
+            if let EventType::KeyPress(Key::KeyR) = event.event_type {
+                if !state.is_recording {
+                    println!("Recording started...");
+                    state.is_recording = true;
+                    state.events.clear();
+                    state.last_time = SystemTime::now();
+                    return; // Don't record the hotkey itself
+                }
+            }
+            if let EventType::KeyPress(Key::Escape) = event.event_type {
+                if state.is_recording {
+                    println!("Recording stopped.");
+                    state.is_recording = false;
+                    save_events(&state.events, &output_path_clone);
+                    return; // Don't record the hotkey itself
+                }
+            }
+        }
+
+        if state.is_recording {
+             let now = SystemTime::now();
+             let delay = now.duration_since(state.last_time).unwrap().as_millis() as u64;
+             state.last_time = now;
+
+             if let Some(serializable_event) = SerializableEvent::from_rdev(event.clone(), delay) {
+                 state.events.push(serializable_event);
+             }
         }
     };
 
@@ -42,4 +80,10 @@ pub fn run_record(output_path: PathBuf) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn save_events(events: &[SerializableEvent], path: &PathBuf) {
+    let file = File::create(path).expect("Failed to create file");
+    serde_json::to_writer_pretty(file, events).expect("Failed to write to file");
+    println!("Saved to {:?}", path);
 }
