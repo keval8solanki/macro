@@ -26,6 +26,12 @@ enum Commands {
         /// Input file path
         #[arg(default_value = "events.json")]
         input: PathBuf,
+        /// Playback speed factor (e.g., 2.0 for 2x speed, 0.5 for half speed)
+        #[arg(long, default_value_t = 1.0)]
+        speed: f64,
+        /// Number of times to repeat playback (0 for infinite)
+        #[arg(long, default_value_t = 1)]
+        repeat_count: u32,
     },
 }
 
@@ -36,8 +42,8 @@ fn main() -> Result<()> {
         Commands::Record { output } => {
             record::run_record(output)?;
         }
-        Commands::Play { input } => {
-            play::run_play(input)?;
+        Commands::Play { input, speed, repeat_count } => {
+            play::run_play(input, speed, repeat_count)?;
         }
     }
 
