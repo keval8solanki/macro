@@ -9,7 +9,11 @@ use std::thread;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
-pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: KeyMaps) -> Result<()> {
+use std::os::unix::process::CommandExt;
+use std::process::Command;
+use std::env;
+
+pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: KeyMaps, immediate: bool) -> Result<()> {
     log::info(format!("Preparing to play back from {:?}...", input_path))?;
     
     // Load events first to ensure file exists and is valid
@@ -24,6 +28,23 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
         log::info("Repeat: Infinite")?;
     } else if repeat_count > 1 {
         log::info(format!("Repeat: {} times", repeat_count))?;
+    }
+
+    if immediate {
+        log::info("Starting playback immediately...")?;
+        
+        // Spawn a thread for playback
+        let events_for_thread = events.clone();
+        thread::spawn(move || {
+            do_playback(&events_for_thread, speed, repeat_count);
+            std::process::exit(0);
+        });
+
+        // Run a dummy listener to keep the main thread alive and responsive
+        if let Err(error) = listen(|_| {}) {
+             log::error(format!("Error: {:?}", error))?;
+        }
+        return Ok(());
     }
 
     log::info(format!("Waiting for start hotkey: {:?} + {:?}", keymaps.start_playback.modifiers, keymaps.start_playback.trigger))?;
@@ -43,48 +64,69 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
     }));
 
     let state_clone = state.clone();
-    let events = Arc::new(events);
-    let events_clone = events.clone();
+    let input_path_clone = input_path.clone();
 
-    listen(move |event| {
-        let mut state = state_clone.lock().unwrap();
+    // Spawn the listener in a background thread
+    thread::spawn(move || {
+        if let Err(error) = listen(move |event| {
+            let mut state = state_clone.lock().unwrap();
 
-        // Update modifiers
-        match event.event_type {
-            EventType::KeyPress(Key::MetaLeft) | EventType::KeyPress(Key::MetaRight) => state.cmd_pressed = true,
-            EventType::KeyRelease(Key::MetaLeft) | EventType::KeyRelease(Key::MetaRight) => state.cmd_pressed = false,
-            EventType::KeyPress(Key::Alt) | EventType::KeyPress(Key::AltGr) => state.alt_pressed = true,
-            EventType::KeyRelease(Key::Alt) | EventType::KeyRelease(Key::AltGr) => state.alt_pressed = false,
-            EventType::KeyPress(Key::ControlLeft) | EventType::KeyPress(Key::ControlRight) => state.ctrl_pressed = true,
-            EventType::KeyRelease(Key::ControlLeft) | EventType::KeyRelease(Key::ControlRight) => state.ctrl_pressed = false,
-            EventType::KeyPress(Key::ShiftLeft) | EventType::KeyPress(Key::ShiftRight) => state.shift_pressed = true,
-            EventType::KeyRelease(Key::ShiftLeft) | EventType::KeyRelease(Key::ShiftRight) => state.shift_pressed = false,
-            _ => {}
-        }
+            // Update modifiers
+            match event.event_type {
+                EventType::KeyPress(Key::MetaLeft) | EventType::KeyPress(Key::MetaRight) => state.cmd_pressed = true,
+                EventType::KeyRelease(Key::MetaLeft) | EventType::KeyRelease(Key::MetaRight) => state.cmd_pressed = false,
+                EventType::KeyPress(Key::Alt) | EventType::KeyPress(Key::AltGr) => state.alt_pressed = true,
+                EventType::KeyRelease(Key::Alt) | EventType::KeyRelease(Key::AltGr) => state.alt_pressed = false,
+                EventType::KeyPress(Key::ControlLeft) | EventType::KeyPress(Key::ControlRight) => state.ctrl_pressed = true,
+                EventType::KeyRelease(Key::ControlLeft) | EventType::KeyRelease(Key::ControlRight) => state.ctrl_pressed = false,
+                EventType::KeyPress(Key::ShiftLeft) | EventType::KeyPress(Key::ShiftRight) => state.shift_pressed = true,
+                EventType::KeyRelease(Key::ShiftLeft) | EventType::KeyRelease(Key::ShiftRight) => state.shift_pressed = false,
+                _ => {}
+            }
 
-        // Check Hotkey
-        let check_modifiers = |modifiers: &[Modifier]| -> bool {
-            for m in modifiers {
-                match m {
-                    Modifier::Cmd => if !state.cmd_pressed { return false; },
-                    Modifier::Alt => if !state.alt_pressed { return false; },
-                    Modifier::Ctrl => if !state.ctrl_pressed { return false; },
-                    Modifier::Shift => if !state.shift_pressed { return false; },
+            // Check Hotkey
+            let check_modifiers = |modifiers: &[Modifier]| -> bool {
+                for m in modifiers {
+                    match m {
+                        Modifier::Cmd => if !state.cmd_pressed { return false; },
+                        Modifier::Alt => if !state.alt_pressed { return false; },
+                        Modifier::Ctrl => if !state.ctrl_pressed { return false; },
+                        Modifier::Shift => if !state.shift_pressed { return false; },
+                    }
+                }
+                true
+            };
+
+            if let EventType::KeyPress(key) = event.event_type {
+                if key == keymaps.start_playback.trigger && check_modifiers(&keymaps.start_playback.modifiers) {
+                    let _ = log::info("Hotkeys detected. Switching to playback process...");
+                    
+                    // Replace current process with new one running in immediate mode
+                    let exe = env::current_exe().unwrap();
+                    let err = Command::new(exe)
+                        .arg("play")
+                        .arg(input_path_clone.to_str().unwrap())
+                        .arg("--speed")
+                        .arg(speed.to_string())
+                        .arg("--repeat-count")
+                        .arg(repeat_count.to_string())
+                        .arg("--immediate")
+                        .exec();
+
+                    // If exec returns, it failed
+                    let _ = log::error(format!("Failed to exec: {:?}", err));
+                    std::process::exit(1);
                 }
             }
-            true
-        };
-
-        if let EventType::KeyPress(key) = event.event_type {
-            if key == keymaps.start_playback.trigger && check_modifiers(&keymaps.start_playback.modifiers) {
-                let _ = log::info("Starting playback...");
-                do_playback(&events_clone, speed, repeat_count);
-                std::process::exit(0);
-            }
+        }) {
+            let _ = log::error(format!("Listen error: {:?}", error));
         }
-    }).map_err(|e| anyhow::anyhow!("Listen error: {:?}", e))?;
+    });
 
-    Ok(())
+    // Keep the main thread alive but doing nothing
+    loop {
+        thread::park();
+    }
 }
 
 fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32) {

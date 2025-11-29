@@ -38,7 +38,17 @@ enum Commands {
         /// Number of times to repeat playback (0 for infinite)
         #[arg(long, default_value_t = 1)]
         repeat_count: u32,
+        /// Internal flag to start playback immediately without waiting for hotkey
+        #[arg(long, default_value_t = false, hide = true)]
+        immediate: bool,
     },
+    #[command(hide = true)]
+    PickFile {
+        #[arg(long)]
+        directory: Option<PathBuf>,
+    },
+    #[command(hide = true)]
+    PickFolder,
 }
 
 fn main() -> Result<()> {
@@ -71,8 +81,22 @@ fn main() -> Result<()> {
 
                 record::run_record(final_path, workspace_config.keymaps)?;
             }
-            Commands::Play { input, speed, repeat_count } => {
-                 play::run_play(input, speed, repeat_count, workspace_config.keymaps)?;
+            Commands::Play { input, speed, repeat_count, immediate } => {
+                 play::run_play(input, speed, repeat_count, workspace_config.keymaps, immediate)?;
+            }
+            Commands::PickFile { directory } => {
+                let mut dialog = rfd::FileDialog::new().add_filter("JSON", &["json"]);
+                if let Some(dir) = directory {
+                    dialog = dialog.set_directory(dir);
+                }
+                if let Some(path) = dialog.pick_file() {
+                    print!("{}", path.display());
+                }
+            }
+            Commands::PickFolder => {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    print!("{}", path.display());
+                }
             }
         }
         return Ok(());
@@ -180,12 +204,18 @@ fn handle_play(workspace_config: &WorkspaceConfig) -> Result<()> {
 
     loop {
         log::info("Opening file picker...")?;
-        let file = rfd::FileDialog::new()
-            .set_directory(&recording_dir)
-            .add_filter("JSON", &["json"])
-            .pick_file();
+        
+        let exe_path = env::current_exe()?;
+        let output = ProcessCommand::new(&exe_path)
+            .arg("pick-file")
+            .arg("--directory")
+            .arg(recording_dir.to_str().unwrap())
+            .output()?;
 
-        if let Some(path) = file {
+        let path_str = String::from_utf8(output.stdout)?.trim().to_string();
+
+        if !path_str.is_empty() {
+            let path = PathBuf::from(path_str);
             log::info(format!("Selected: {:?}", path))?;
             
             let speed: f64 = input("Playback speed")
@@ -232,9 +262,16 @@ fn handle_play(workspace_config: &WorkspaceConfig) -> Result<()> {
 
 fn handle_config() -> Result<()> {
     log::info("Opening folder picker for workspace...")?;
-    let folder = rfd::FileDialog::new().pick_folder();
+    
+    let exe_path = env::current_exe()?;
+    let output = ProcessCommand::new(exe_path)
+        .arg("pick-folder")
+        .output()?;
 
-    if let Some(path) = folder {
+    let path_str = String::from_utf8(output.stdout)?.trim().to_string();
+
+    if !path_str.is_empty() {
+        let path = PathBuf::from(path_str);
         log::success(format!("Selected folder: {:?}", path))?;
         let _ = config::create_workspace(path.clone())?;
         config::save_global_config(&GlobalConfig {
