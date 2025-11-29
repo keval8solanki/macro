@@ -1,5 +1,6 @@
 use crate::event::SerializableEvent;
 use anyhow::Result;
+use cliclack::log;
 use rdev::simulate;
 use std::fs::File;
 use std::path::PathBuf;
@@ -7,14 +8,14 @@ use std::thread;
 use std::time::Duration;
 
 pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32) -> Result<()> {
-    println!("Playing back from {:?}...", input_path);
+    log::info(format!("Playing back from {:?}...", input_path))?;
     if speed != 1.0 {
-        println!("Playback speed: {:.2}x", speed);
+        log::info(format!("Playback speed: {:.2}x", speed))?;
     }
     if repeat_count == 0 {
-        println!("Repeat: Infinite");
+        log::info("Repeat: Infinite")?;
     } else if repeat_count > 1 {
-        println!("Repeat: {} times", repeat_count);
+        log::info(format!("Repeat: {} times", repeat_count))?;
     }
 
     let file = File::open(input_path)?;
@@ -26,7 +27,7 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32) -> Result<()
             break;
         }
         if count > 0 {
-             println!("Repeat #{}", count + 1);
+             log::info(format!("Repeat #{}", count + 1))?;
         }
 
         for event in &events {
@@ -38,12 +39,12 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32) -> Result<()
             let rdev_event_type = event.to_rdev();
             match simulate(&rdev_event_type) {
                 Ok(()) => (),
-                Err(e) => println!("We could not send {:?}: {:?}", rdev_event_type, e),
+                Err(e) => log::error(format!("We could not send {:?}: {:?}", rdev_event_type, e))?,
             }
         }
         count += 1;
     }
 
-    println!("Playback complete.");
+    log::success("Playback complete.")?;
     Ok(())
 }
