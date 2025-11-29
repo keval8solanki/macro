@@ -72,7 +72,7 @@ fn main() -> Result<()> {
                 record::run_record(final_path, workspace_config.keymaps)?;
             }
             Commands::Play { input, speed, repeat_count } => {
-                 play::run_play(input, speed, repeat_count)?;
+                 play::run_play(input, speed, repeat_count, workspace_config.keymaps)?;
             }
         }
         return Ok(());
@@ -196,7 +196,26 @@ fn handle_play(workspace_config: &WorkspaceConfig) -> Result<()> {
                 .default_input("1")
                 .interact()?;
 
-            play::run_play(path, speed, repeat)?;
+            log::info("Playback will start in a separate process.")?;
+            
+            // Spawn child process
+            let exe_path = env::current_exe()?;
+            let mut child = ProcessCommand::new(exe_path)
+                .arg("play")
+                .arg(path.to_str().unwrap())
+                .arg("--speed")
+                .arg(speed.to_string())
+                .arg("--repeat-count")
+                .arg(repeat.to_string())
+                .spawn()?;
+
+            let status = child.wait()?;
+
+            if status.success() {
+                log::success("Playback finished.")?;
+            } else {
+                log::error("Playback process failed or was interrupted.")?;
+            }
             
             let play_again = confirm("Do you want to play another?").interact()?;
             if !play_again {

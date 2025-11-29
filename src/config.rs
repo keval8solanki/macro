@@ -19,6 +19,15 @@ pub struct WorkspaceConfig {
 pub struct KeyMaps {
     pub start_recording: KeyCombo,
     pub stop_recording: KeyCombo,
+    #[serde(default = "default_start_playback")]
+    pub start_playback: KeyCombo,
+}
+
+fn default_start_playback() -> KeyCombo {
+    KeyCombo {
+        modifiers: vec![Modifier::Cmd, Modifier::Alt],
+        trigger: Key::KeyP,
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -46,6 +55,7 @@ impl Default for KeyMaps {
                 modifiers: vec![Modifier::Cmd, Modifier::Alt],
                 trigger: Key::Escape,
             },
+            start_playback: default_start_playback(),
         }
     }
 }
