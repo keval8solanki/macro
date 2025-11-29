@@ -21,9 +21,18 @@ pub struct KeyMaps {
     pub stop_recording: KeyCombo,
     #[serde(default = "default_start_playback")]
     pub start_playback: KeyCombo,
+    #[serde(default = "default_stop_playback")]
+    pub stop_playback: KeyCombo,
 }
 
 fn default_start_playback() -> KeyCombo {
+    KeyCombo {
+        modifiers: vec![Modifier::Cmd, Modifier::Alt],
+        trigger: Key::KeyP,
+    }
+}
+
+fn default_stop_playback() -> KeyCombo {
     KeyCombo {
         modifiers: vec![Modifier::Cmd, Modifier::Alt],
         trigger: Key::KeyP,
@@ -53,9 +62,10 @@ impl Default for KeyMaps {
             },
             stop_recording: KeyCombo {
                 modifiers: vec![Modifier::Cmd, Modifier::Alt],
-                trigger: Key::Escape,
+                trigger: Key::KeyR,
             },
             start_playback: default_start_playback(),
+            stop_playback: default_stop_playback(),
         }
     }
 }

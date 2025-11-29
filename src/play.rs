@@ -32,16 +32,76 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
 
     if immediate {
         log::info("Starting playback immediately...")?;
+        log::info(format!("Stop Playback: {:?} + {:?}", keymaps.stop_playback.modifiers, keymaps.stop_playback.trigger))?;
+        
+        // Shared flag to stop playback
+        let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
         
         // Spawn a thread for playback
         let events_for_thread = events.clone();
+        let stop_flag_play = stop_flag.clone();
         thread::spawn(move || {
-            do_playback(&events_for_thread, speed, repeat_count);
+            do_playback(&events_for_thread, speed, repeat_count, stop_flag_play);
             std::process::exit(0);
         });
 
-        // Run a dummy listener to keep the main thread alive and responsive
-        if let Err(error) = listen(|_| {}) {
+        // Listen for stop hotkey
+        let stop_flag_listen = stop_flag.clone();
+        let keymaps_clone = keymaps.clone();
+        
+        struct StopState {
+            cmd_pressed: bool,
+            alt_pressed: bool,
+            ctrl_pressed: bool,
+            shift_pressed: bool,
+        }
+
+        let state = Arc::new(Mutex::new(StopState {
+            cmd_pressed: false,
+            alt_pressed: false,
+            ctrl_pressed: false,
+            shift_pressed: false,
+        }));
+
+        let state_clone = state.clone();
+        
+        if let Err(error) = listen(move |event| {
+            let mut state = state_clone.lock().unwrap();
+
+            // Update modifiers
+            match event.event_type {
+                EventType::KeyPress(Key::MetaLeft) | EventType::KeyPress(Key::MetaRight) => state.cmd_pressed = true,
+                EventType::KeyRelease(Key::MetaLeft) | EventType::KeyRelease(Key::MetaRight) => state.cmd_pressed = false,
+                EventType::KeyPress(Key::Alt) | EventType::KeyPress(Key::AltGr) => state.alt_pressed = true,
+                EventType::KeyRelease(Key::Alt) | EventType::KeyRelease(Key::AltGr) => state.alt_pressed = false,
+                EventType::KeyPress(Key::ControlLeft) | EventType::KeyPress(Key::ControlRight) => state.ctrl_pressed = true,
+                EventType::KeyRelease(Key::ControlLeft) | EventType::KeyRelease(Key::ControlRight) => state.ctrl_pressed = false,
+                EventType::KeyPress(Key::ShiftLeft) | EventType::KeyPress(Key::ShiftRight) => state.shift_pressed = true,
+                EventType::KeyRelease(Key::ShiftLeft) | EventType::KeyRelease(Key::ShiftRight) => state.shift_pressed = false,
+                _ => {}
+            }
+
+            // Check stop hotkey
+            let check_modifiers = |modifiers: &[Modifier]| -> bool {
+                for m in modifiers {
+                    match m {
+                        Modifier::Cmd => if !state.cmd_pressed { return false; },
+                        Modifier::Alt => if !state.alt_pressed { return false; },
+                        Modifier::Ctrl => if !state.ctrl_pressed { return false; },
+                        Modifier::Shift => if !state.shift_pressed { return false; },
+                    }
+                }
+                true
+            };
+
+            if let EventType::KeyPress(key) = event.event_type {
+                if key == keymaps_clone.stop_playback.trigger && check_modifiers(&keymaps_clone.stop_playback.modifiers) {
+                    let _ = log::info("Stop hotkey detected. Stopping playback...");
+                    stop_flag_listen.store(true, std::sync::atomic::Ordering::SeqCst);
+                    std::process::exit(0);
+                }
+            }
+        }) {
              log::error(format!("Error: {:?}", error))?;
         }
         return Ok(());
@@ -129,7 +189,7 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
     }
 }
 
-fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32) {
+fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32, stop_flag: Arc<std::sync::atomic::AtomicBool>) {
     let mut count = 0;
     loop {
         if repeat_count > 0 && count >= repeat_count {
@@ -140,6 +200,12 @@ fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32) {
         }
 
         for event in events {
+            // Check if stop was requested
+            if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                let _ = log::info("Playback stopped by user.");
+                return;
+            }
+            
             // Adjust delay based on speed
             let delay = (event.delay_ms as f64 / speed) as u64;
             thread::sleep(Duration::from_millis(delay));
