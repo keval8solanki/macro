@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use anyhow::{Context, Result};
 use rdev::Key;
-use anyhow::{Result, Context};
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GlobalConfig {
@@ -35,7 +35,7 @@ fn default_start_playback() -> KeyCombo {
 fn default_stop_playback() -> KeyCombo {
     KeyCombo {
         modifiers: vec![Modifier::Cmd, Modifier::Alt],
-        trigger: Key::KeyP,
+        trigger: Key::Num0,
     }
 }
 
@@ -58,11 +58,11 @@ impl Default for KeyMaps {
         Self {
             start_recording: KeyCombo {
                 modifiers: vec![Modifier::Cmd, Modifier::Alt],
-                trigger: Key::KeyR,
+                trigger: Key::Num0,
             },
             stop_recording: KeyCombo {
                 modifiers: vec![Modifier::Cmd, Modifier::Alt],
-                trigger: Key::KeyR,
+                trigger: Key::Num0,
             },
             start_playback: default_start_playback(),
             stop_playback: default_stop_playback(),
@@ -106,16 +106,16 @@ pub fn load_workspace_config(path: &PathBuf) -> Result<WorkspaceConfig> {
 pub fn create_workspace(path: PathBuf) -> Result<WorkspaceConfig> {
     let config_path = path.join("config.json");
     let recording_path = path.join("recording");
-    
+
     fs::create_dir_all(&recording_path)?;
-    
+
     let config = WorkspaceConfig {
         path: path.clone(),
         keymaps: KeyMaps::default(),
     };
-    
+
     let content = serde_json::to_string_pretty(&config)?;
     fs::write(config_path, content)?;
-    
+
     Ok(config)
 }
