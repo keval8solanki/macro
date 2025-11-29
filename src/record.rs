@@ -109,7 +109,7 @@ pub fn run_record(output_path: PathBuf, keymaps: KeyMaps) -> Result<()> {
 
 fn save_events(events: &[SerializableEvent], path: &PathBuf) {
     let file = File::create(path).expect("Failed to create file");
-    serde_json::to_writer_pretty(file, events).expect("Failed to write to file");
+    serde_json::to_writer(file, events).expect("Failed to write to file");
     let _ = log::success(format!("Saved to {:?}", path));
     std::process::exit(0);
 }
