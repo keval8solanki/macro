@@ -50,6 +50,7 @@ pub struct BarApp {
     pub quit_i: MenuItem,
     pub icon_idle: Icon,
     pub icon_recording: Icon,
+    pub icon_playing: Icon,
     pub icon_armed: Icon,
     pub record_hotkey: HotKey,
     pub playback_hotkey: HotKey,
@@ -59,8 +60,9 @@ impl BarApp {
     pub fn new(proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
         // Icons
         let icon_idle = create_icon(255, 255, 255, 255); // White
-        let icon_recording = create_icon(255, 0, 0, 255); // Red
-        let icon_armed = create_icon(255, 255, 0, 255); // Yellow
+        let icon_recording = create_icon(255, 86, 86, 255); // #FF5656
+        let icon_playing = create_icon(115, 175, 111, 255); // #73AF6F
+        let icon_armed = create_icon(255, 162, 57, 255); // #FFA239
 
         // Menu
         let tray_menu = Menu::new();
@@ -150,6 +152,7 @@ impl BarApp {
             quit_i,
             icon_idle,
             icon_recording,
+            icon_playing,
             icon_armed,
             record_hotkey,
             playback_hotkey,
@@ -546,7 +549,7 @@ impl BarApp {
             let _ = self.settings_menu.set_enabled(false);
             
             if let Some(tray) = &mut self.tray_icon {
-                let _ = tray.set_icon(Some(self.icon_armed.clone())); // Or maybe a playing icon?
+                let _ = tray.set_icon(Some(self.icon_playing.clone()));
             }
         } else if has_recording {
             // Recording Loaded
@@ -615,12 +618,31 @@ fn get_recordings_dir() -> PathBuf {
 fn create_icon(r: u8, g: u8, b: u8, a: u8) -> Icon {
     let width = 22;
     let height = 22;
+    let center_x = width as f32 / 2.0;
+    let center_y = height as f32 / 2.0;
+    let radius = (width as f32 / 2.0) - 3.0; // Smaller circle
+
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-    for _ in 0..width * height {
-        rgba.push(r);
-        rgba.push(g);
-        rgba.push(b);
-        rgba.push(a);
+    
+    for y in 0..height {
+        for x in 0..width {
+            let dx = x as f32 - center_x + 0.5; // +0.5 to center in pixel
+            let dy = y as f32 - center_y + 0.5;
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            if distance <= radius {
+                rgba.push(r);
+                rgba.push(g);
+                rgba.push(b);
+                rgba.push(a);
+            } else {
+                // Transparent
+                rgba.push(0);
+                rgba.push(0);
+                rgba.push(0);
+                rgba.push(0);
+            }
+        }
     }
     Icon::from_rgba(rgba, width, height).expect("Failed to create icon")
 }
