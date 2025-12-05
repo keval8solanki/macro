@@ -1,127 +1,88 @@
-# Macro
+# Macro Recorder
 
-**Macro** is a powerful, cross-platform CLI tool designed to record and replay mouse and keyboard events. Whether you need to automate repetitive tasks, test UI interactions, or create macros for gaming or productivity, **Macro** provides a simple and efficient solution.
+A simple yet powerful macro recorder for macOS, built with Rust.
 
-> **Note:** This project is currently under active development. Features and usage patterns are subject to change.
-
-## Features
-
-- **Record Events:** Capture mouse movements, clicks, and keyboard strokes with precision.
-- **Replay Events:** Play back recorded sessions with adjustable speed and repeat options.
-- **Interactive CLI:** User-friendly terminal interface using `cliclack` for easy navigation.
-- **Configurable Hotkeys:** Global hotkeys for starting/stopping recording and playback.
-- **Workspace Management:** Organized storage for your recordings and configuration.
-- **Cross-Platform:** Works on macOS, Windows, and Linux.
+## Table of Contents
+- [Installation](#installation)
+- [Build Guide](#build-guide)
+- [Usage](#usage)
+- [Permissions](#permissions)
 
 ## Installation
 
 ### Prerequisites
+- macOS
+- Rust and Cargo (for building from source)
 
-- [Rust](https://www.rust-lang.org/tools/install) (latest stable version)
-
-### Build from Source
-
+### Steps
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/keval8solanki/macro.git
+    git clone <repository-url>
     cd macro
     ```
 
-2.  Build the project:
-    ```bash
-    cargo build --release
-    ```
+## Build Guide
 
-3.  Run the binary:
-    ```bash
-    ./target/release/macro
-    ```
+You can build the application using the included bundle script, which creates a proper macOS `.app` bundle.
 
-    Or run directly with Cargo:
+1.  Run the bundle script:
     ```bash
-    cargo run
+    ./bundle.sh
     ```
+2.  The application `Macro.app` will be created in the project root.
+3.  You can move `Macro.app` to your `/Applications` folder or run it directly.
+
+Alternatively, to just build the binary:
+```bash
+cargo build --release
+```
+The binary will be located at `target/release/macro`.
 
 ## Usage
 
-**Macro** can be used in an interactive mode or via direct CLI commands.
+Launch `Macro.app` or run the binary. The application runs in the background and lives in your system status bar (menu bar).
 
-### Interactive Mode
+### Tray Icon Menu
+Click the tray icon to access the menu:
+-   **Start/Stop Recording**: Manually toggle recording.
+-   **Load Recording**: Open a file picker to select a previously saved JSON recording for playback.
+-   **Start/Stop Playback**: Manually toggle playback (requires a loaded recording).
+-   **Settings**:
+    -   **Playback Speed**: Choose between 0.5x, 1.0x (default), and 2.0x.
+    -   **Repeat Count**: Choose between 1x (default) or Infinite loop.
+-   **Quit**: Exit the application.
 
-Simply run the application without arguments to enter the interactive menu:
+### Hotkeys
+Global hotkeys are available for quick control:
 
-```bash
-macro
-```
+-   **Command + Shift + 1**: Toggle Recording.
+    -   **Start**: Begins recording your mouse and keyboard actions.
+    -   **Stop**: Stops recording and opens a file dialog to save the macro (default location: `Documents/Macros` or workspace configured path).
+-   **Command + Shift + 2**: Toggle Playback.
+    -   **Start**: Plays the currently loaded recording.
+    -   **Stop**: Stops the current playback.
 
-You will be presented with the following options:
+### Status Indicators
+The tray icon changes color to indicate status:
+-   **White**: Idle / Ready.
+-   **Red**: Recording in progress.
+-   **Yellow**: Recording loaded / Playback in progress.
 
-1.  **Config**:
-    - Select a workspace folder where your recordings and configuration will be saved.
-    - This creates a `config.json` and a `recording/` directory in the selected folder.
+## Permissions
 
-2.  **Record**:
-    - Enter a name for your recording (defaults to the current timestamp).
-    - The tool will wait for the **Start Recording** hotkey.
-    - Perform your actions.
-    - Press the **Stop Recording** hotkey to save the session.
+For the macro recorder to function (record inputs and simulate events), it requires **Accessibility** permissions on macOS.
 
-3.  **Play**:
-    - Select a recording from your workspace.
-    - Set the **Playback Speed** (e.g., `1.0` for normal, `2.0` for 2x speed).
-    - Set the **Repeat Count** (`0` for infinite loop, `1` for single run).
-    - The tool will wait for the **Start Playback** hotkey.
-    - Press the **Stop Playback** hotkey to interrupt playback at any time.
+### How to Grant Permissions
+1.  **First Run**: When you first run the app and try to record or play, macOS may prompt you to grant Accessibility access. Click "Open System Settings".
+2.  **Manual Setup**:
+    -   Open **System Settings**.
+    -   Go to **Privacy & Security** -> **Accessibility**.
+    -   Click the `+` button in the list.
+    -   Select `Macro.app` (or your Terminal app if running from CLI).
+    -   Ensure the toggle is enabled.
 
-### CLI Commands
+**Note**: If you rebuild the app, you might need to remove and re-add the entry in Accessibility settings if macOS doesn't recognize the new binary signature.
 
-You can also use subcommands for direct execution:
-
-- **Record to a specific file:**
-  ```bash
-  macro record my_macro.json
-  ```
-
-- **Play a specific file:**
-  ```bash
-  macro play my_macro.json --speed 1.5 --repeat-count 5
-  ```
-
-## Hotkeys
-
-Default hotkeys are configured as follows:
-
-| Action | Default Hotkey |
-| :--- | :--- |
-| **Start Recording** | `Cmd` + `Alt` + `R` |
-| **Stop Recording** | `Cmd` + `Alt` + `R` |
-| **Start Playback** | `Cmd` + `Alt` + `P` |
-| **Stop Playback** | `Cmd` + `Alt` + `P` |
-
-### Customization
-
-You can customize these hotkeys by editing the `config.json` file located in your selected workspace folder.
-
-Example `config.json` snippet:
-
-```json
-{
-  "keymaps": {
-    "start_recording": {
-      "modifiers": ["Cmd", "Alt"],
-      "trigger": "KeyR"
-    },
-    ...
-  }
-}
-```
-### Allowed Keys
-
-For a complete list of allowed keys, please refer to the [`rdev` documentation](https://docs.rs/rdev/latest/rdev/enum.Key.html).
-
-Common keys include:
-- **Letters:** `KeyA` ... `KeyZ`
-- **Numbers:** `Num0` ... `Num9`
-- **Function Keys:** `F1` ... `F12`
-- **Special:** `Return`, `Escape`, `Space`, `Tab`, `Backspace`
-- **Modifiers:** `ShiftLeft`, `ControlLeft`, `Alt`, `MetaLeft` (Command/Windows)
+### Troubleshooting
+-   If usage is "jerky" or events are dropped, ensure **Input Monitoring** permission is also granted (though Accessibility is usually sufficient for `rdev` and `tao`).
+-   If hotkeys are not working, ensure another app isn't blocking them or that the app has Accessibility permissions.
