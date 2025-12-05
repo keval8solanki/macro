@@ -18,6 +18,30 @@ mkdir -p "$RESOURCES_DIR"
 echo "Copying binaries..."
 cp target/release/macro "$MACOS_DIR/"
 
+echo "Processing icon..."
+if [ -f "assets/icon.png" ]; then
+    ICONSET_DIR="AppIcon.iconset"
+    mkdir -p "$ICONSET_DIR"
+    
+    # Generate icons of different sizes
+    sips -z 16 16     -s format png assets/icon.png --out "${ICONSET_DIR}/icon_16x16.png"
+    sips -z 32 32     -s format png assets/icon.png --out "${ICONSET_DIR}/icon_16x16@2x.png"
+    sips -z 32 32     -s format png assets/icon.png --out "${ICONSET_DIR}/icon_32x32.png"
+    sips -z 64 64     -s format png assets/icon.png --out "${ICONSET_DIR}/icon_32x32@2x.png"
+    sips -z 128 128   -s format png assets/icon.png --out "${ICONSET_DIR}/icon_128x128.png"
+    sips -z 256 256   -s format png assets/icon.png --out "${ICONSET_DIR}/icon_128x128@2x.png"
+    sips -z 256 256   -s format png assets/icon.png --out "${ICONSET_DIR}/icon_256x256.png"
+    sips -z 512 512   -s format png assets/icon.png --out "${ICONSET_DIR}/icon_256x256@2x.png"
+    sips -z 512 512   -s format png assets/icon.png --out "${ICONSET_DIR}/icon_512x512.png"
+    sips -z 1024 1024 -s format png assets/icon.png --out "${ICONSET_DIR}/icon_512x512@2x.png"
+    
+    iconutil -c icns "$ICONSET_DIR"
+    cp AppIcon.icns "$RESOURCES_DIR/"
+    rm -rf "$ICONSET_DIR" AppIcon.icns
+else
+    echo "Warning: assets/icon.png not found, skipping icon generation"
+fi
+
 echo "Creating Info.plist..."
 cat > "$CONTENTS_DIR/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -34,6 +58,8 @@ cat > "$CONTENTS_DIR/Info.plist" << EOF
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
 </dict>
