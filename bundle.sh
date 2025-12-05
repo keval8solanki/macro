@@ -44,6 +44,10 @@ EOF
 
 echo "App bundle created at $APP_DIR"
 
+echo "Signing app..."
+# Ad-hoc signing to prevent "Damaged" error
+codesign --force --deep --sign - "$APP_DIR" || echo "Warning: Code signing failed"
+
 echo "Creating DMG..."
 DMG_NAME="$APP_NAME.dmg"
 # npx create-dmg will overwrite if we pass the flag, but let's be safe
