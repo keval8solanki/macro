@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Build and Bundle
+      run: |
+        chmod +x bundle.sh
+        ./bundle.sh
+        
+    - name: Compress App
+      run: zip -r Macro.app.zip Macro.app
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: Macro.app.zip
+        draft: false
+        prerelease: false
