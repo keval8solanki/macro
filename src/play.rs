@@ -1,7 +1,6 @@
 use crate::event::SerializableEvent;
 use crate::config::{KeyMaps, Modifier};
 use anyhow::Result;
-use cliclack::log;
 use rdev::{listen, simulate, EventType, Key};
 use std::fs::File;
 use std::path::PathBuf;
@@ -14,25 +13,25 @@ use std::process::Command;
 use std::env;
 
 pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: KeyMaps, immediate: bool) -> Result<()> {
-    log::info(format!("Preparing to play back from {:?}...", input_path))?;
+    log::info!("Preparing to play back from {:?}...", input_path);
     
     // Load events first to ensure file exists and is valid
     let file = File::open(&input_path)?;
     let events: Vec<SerializableEvent> = serde_json::from_reader(file)?;
-    log::info(format!("Loaded {} events.", events.len()))?;
+    log::info!("Loaded {} events.", events.len());
 
     if speed != 1.0 {
-        log::info(format!("Playback speed: {:.2}x", speed))?;
+        log::info!("Playback speed: {:.2}x", speed);
     }
     if repeat_count == 0 {
-        log::info("Repeat: Infinite")?;
+        log::info!("Repeat: Infinite");
     } else if repeat_count > 1 {
-        log::info(format!("Repeat: {} times", repeat_count))?;
+        log::info!("Repeat: {} times", repeat_count);
     }
 
     if immediate {
-        log::info("Starting playback immediately...")?;
-        log::info(format!("Stop Playback: {:?} + {:?}", keymaps.stop_playback.modifiers, keymaps.stop_playback.trigger))?;
+        log::info!("Starting playback immediately...");
+        log::info!("Stop Playback: {:?} + {:?}", keymaps.stop_playback.modifiers, keymaps.stop_playback.trigger);
         
         // Shared flag to stop playback
         let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -96,18 +95,18 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
 
             if let EventType::KeyPress(key) = event.event_type {
                 if key == keymaps_clone.stop_playback.trigger && check_modifiers(&keymaps_clone.stop_playback.modifiers) {
-                    let _ = log::info("Stop hotkey detected. Stopping playback...");
+                    log::info!("Stop hotkey detected. Stopping playback...");
                     stop_flag_listen.store(true, std::sync::atomic::Ordering::SeqCst);
                     std::process::exit(0);
                 }
             }
         }) {
-             log::error(format!("Error: {:?}", error))?;
+             log::error!("Error: {:?}", error);
         }
         return Ok(());
     }
 
-    log::info(format!("Waiting for start hotkey: {:?} + {:?}", keymaps.start_playback.modifiers, keymaps.start_playback.trigger))?;
+    log::info!("Waiting for start hotkey: {:?} + {:?}", keymaps.start_playback.modifiers, keymaps.start_playback.trigger);
 
     struct PlayState {
         cmd_pressed: bool,
@@ -159,7 +158,7 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
 
             if let EventType::KeyPress(key) = event.event_type {
                 if key == keymaps.start_playback.trigger && check_modifiers(&keymaps.start_playback.modifiers) {
-                    let _ = log::info("Hotkeys detected. Switching to playback process...");
+                    log::info!("Hotkeys detected. Switching to playback process...");
                     
                     // Replace current process with new one running in immediate mode
                     let exe = env::current_exe().unwrap();
@@ -174,12 +173,12 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
                         .exec();
 
                     // If exec returns, it failed
-                    let _ = log::error(format!("Failed to exec: {:?}", err));
+                    log::error!("Failed to exec: {:?}", err);
                     std::process::exit(1);
                 }
             }
         }) {
-            let _ = log::error(format!("Listen error: {:?}", error));
+            log::error!("Listen error: {:?}", error);
         }
     });
 
@@ -189,20 +188,20 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
     }
 }
 
-fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32, stop_flag: Arc<std::sync::atomic::AtomicBool>) {
+pub fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32, stop_flag: Arc<std::sync::atomic::AtomicBool>) {
     let mut count = 0;
     loop {
         if repeat_count > 0 && count >= repeat_count {
             break;
         }
         if count > 0 {
-             let _ = log::info(format!("Repeat #{}", count + 1));
+             log::info!("Repeat #{}", count + 1);
         }
 
         for event in events {
             // Check if stop was requested
             if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-                let _ = log::info("Playback stopped by user.");
+                log::info!("Playback stopped by user.");
                 return;
             }
             
@@ -211,13 +210,15 @@ fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32, stop
             thread::sleep(Duration::from_millis(delay));
             let rdev_event_type = event.to_rdev();
             match simulate(&rdev_event_type) {
-                Ok(()) => (),
+                Ok(()) => {
+                    log::debug!("Simulated event: {:?}", rdev_event_type);
+                },
                 Err(e) => {
-                    let _ = log::error(format!("We could not send {:?}: {:?}", rdev_event_type, e));
+                    log::error!("We could not send {:?}: {:?}", rdev_event_type, e);
                 }
             }
         }
         count += 1;
     }
-    let _ = log::success("Playback complete.");
+    log::info!("Playback complete.");
 }

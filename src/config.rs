@@ -105,7 +105,7 @@ pub fn load_workspace_config(path: &PathBuf) -> Result<WorkspaceConfig> {
 
 pub fn create_workspace(path: PathBuf) -> Result<WorkspaceConfig> {
     let config_path = path.join("config.json");
-    let recording_path = path.join("recording");
+    let recording_path = path.join("recordings");
 
     fs::create_dir_all(&recording_path)?;
 
