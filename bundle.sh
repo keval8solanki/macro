@@ -40,4 +40,20 @@ cat > "$CONTENTS_DIR/Info.plist" << EOF
 </plist>
 EOF
 
+
+
 echo "App bundle created at $APP_DIR"
+
+echo "Creating DMG..."
+DMG_NAME="$APP_NAME.dmg"
+# npx create-dmg will overwrite if we pass the flag, but let's be safe
+rm -f "$DMG_NAME"
+
+# Create DMG using create-dmg for better UX (Applications link, icons)
+# usage: create-dmg <app> [destination_dir]
+npx -y create-dmg "$APP_DIR" || true
+
+# Rename the generated DMG (likely "Macro 1.0.dmg") to Macro.dmg
+mv "$APP_NAME"*.dmg "$DMG_NAME" || echo "Warning: Could not rename DMG, check output."
+
+echo "DMG created at $DMG_NAME"
