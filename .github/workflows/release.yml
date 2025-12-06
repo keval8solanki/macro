@@ -22,7 +22,7 @@ jobs:
       run: |
         chmod +x bundle.sh
         ./bundle.sh
-        tar -cvzf macro-macos.tar.gz target/release/macro
+        tar -C target/release -cvzf macro-macos.tar.gz macro
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
