@@ -49,6 +49,7 @@ jobs:
           fi
           echo "Found identity: $IDENTITY_OUTPUT"
           echo "SIGNING_IDENTITY=$IDENTITY_OUTPUT" >> $GITHUB_ENV
+          export SIGNING_IDENTITY=$IDENTITY_OUTPUT
         fi
 
         ./bundle.sh
