@@ -53,11 +53,11 @@ jobs:
           
           # Find the identity we just imported
           # We look for the first valid identity in the keychain we just created
-          IDENTITY_OUTPUT=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | head -1 | grep '"' | awk -F '"' '{print $2}')
+          IDENTITY_OUTPUT=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | awk -F '"' '{print $2}')
           
           if [ -z "$IDENTITY_OUTPUT" ]; then
             echo "::warning::No valid identity found. Checking for ANY identity (e.g. self-signed)..."
-            IDENTITY_OUTPUT=$(security find-identity -p codesigning $KEYCHAIN_PATH | head -1 | grep '"' | awk -F '"' '{print $2}')
+            IDENTITY_OUTPUT=$(security find-identity -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | awk -F '"' '{print $2}')
           fi
 
           if [ -z "$IDENTITY_OUTPUT" ]; then
