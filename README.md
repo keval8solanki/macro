@@ -1,88 +1,67 @@
+<p align="center">
+  <img src="assets/icon.png" width="128" height="128" alt="Macro Logo">
+</p>
+
 # Macro Recorder
 
 A simple yet powerful macro recorder for macOS, built with Rust.
 
-## Table of Contents
-- [Installation](#installation)
-- [Build Guide](#build-guide)
-- [Usage](#usage)
-- [Permissions](#permissions)
+## Download
 
-## Installation
+You can download the latest version from the [Releases](https://github.com/keval8solanki/macro/releases) page.
 
-### Prerequisites
-- macOS
-- Rust and Cargo (for building from source)
-
-### Steps
-1.  Clone the repository:
-    ```bash
-    git clone <repository-url>
-    cd macro
-    ```
-
-## Build Guide
-
-You can build the application using the included bundle script, which creates a proper macOS `.app` bundle.
-
-1.  Run the bundle script:
-    ```bash
-    ./bundle.sh
-    ```
-2.  The application `Macro.app` will be created in the project root.
-3.  You can move `Macro.app` to your `/Applications` folder or run it directly.
-
-Alternatively, to just build the binary:
-```bash
-cargo build --release
-```
-The binary will be located at `target/release/macro`.
+> Note:
+> **Untrusted Developer**
+>
+> Since this application is not signed with an Apple Developer ID, macOS may block it from opening.
+> 1. Try to open the app.
+> 2. If you see a warning, go to **System Settings** -> **Privacy & Security**.
+> 3. Scroll down to the security section and look for a message about "Macro.app".
+> 4. Click **Open Anyway**.
 
 ## Usage
 
-Launch `Macro.app` or run the binary. The application runs in the background and lives in your system status bar (menu bar).
-
-### Tray Icon Menu
-Click the tray icon to access the menu:
--   **Start/Stop Recording**: Manually toggle recording.
--   **Load Recording**: Open a file picker to select a previously saved JSON recording for playback.
--   **Start/Stop Playback**: Manually toggle playback (requires a loaded recording).
--   **Settings**:
-    -   **Playback Speed**: Choose between 0.5x, 1.0x (default), and 2.0x.
-    -   **Repeat Count**: Choose between 1x (default) or Infinite loop.
--   **Quit**: Exit the application.
+Launch `Macro.app`. The application lives in your system status bar (menu bar).
 
 ### Hotkeys
 Global hotkeys are available for quick control:
 
 -   **Command + Shift + 1**: Toggle Recording.
     -   **Start**: Begins recording your mouse and keyboard actions.
-    -   **Stop**: Stops recording and opens a file dialog to save the macro (default location: `Documents/Macros` or workspace configured path).
+    -   **Stop**: Stops recording and opens a file dialog to save the macro.
 -   **Command + Shift + 2**: Toggle Playback.
     -   **Start**: Plays the currently loaded recording.
     -   **Stop**: Stops the current playback.
+-   **Command + Shift + 0**: Load / Unload.
+    -   **Load**: Opens a file picker to select a recording (if none loaded).
+    -   **Unload**: Unloads the current recording (if one is loaded).
 
 ### Status Indicators
-The tray icon changes color to indicate status:
+The tray icon changes color to indicate the current state:
 -   **White**: Idle / Ready.
 -   **Red**: Recording in progress.
--   **Yellow**: Recording loaded / Playback in progress.
+-   **Orange**: Recording loaded (Armed).
+-   **Green**: Playback in progress.
+
+### Settings
+Click the tray icon and select **Settings...** to configure:
+-   **Playback Speed**: 0.5x, 1.0x, 2.0x, etc.
+-   **Repeat Count**: Number of times to loop the macro (or infinite).
+-   **Repeat Interval**: Delay between loops.
 
 ## Permissions
 
-For the macro recorder to function (record inputs and simulate events), it requires **Accessibility** permissions on macOS.
+For the macro recorder to function, it requires specific permissions.
 
-### How to Grant Permissions
-1.  **First Run**: When you first run the app and try to record or play, macOS may prompt you to grant Accessibility access. Click "Open System Settings".
-2.  **Manual Setup**:
-    -   Open **System Settings**.
-    -   Go to **Privacy & Security** -> **Accessibility**.
-    -   Click the `+` button in the list.
-    -   Select `Macro.app` (or your Terminal app if running from CLI).
-    -   Ensure the toggle is enabled.
+### Accessibility (Required)
+Required to record inputs and simulate events.
+1.  **System Settings** -> **Privacy & Security** -> **Accessibility**.
+2.  Click `+` and add `Macro.app`.
+3.  Ensure the toggle is **Enabled**.
 
-**Note**: If you rebuild the app, you might need to remove and re-add the entry in Accessibility settings if macOS doesn't recognize the new binary signature.
+### Input Monitoring (Required)
+Required to detect and record input events globally.
+1.  **System Settings** -> **Privacy & Security** -> **Input Monitoring**.
+2.  Add `Macro.app` and enable it.
 
-### Troubleshooting
--   If usage is "jerky" or events are dropped, ensure **Input Monitoring** permission is also granted (though Accessibility is usually sufficient for `rdev` and `tao`).
--   If hotkeys are not working, ensure another app isn't blocking them or that the app has Accessibility permissions.
+**Note**: If you update or rebuild the app, you may need to remove and re-add these permissions if macOS invalidates the previous signature.
