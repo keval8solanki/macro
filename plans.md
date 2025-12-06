@@ -1,4 +1,4 @@
 - [x] improve control pannel look
 - [ ] Add check for updates feature
-- [ ] cleanup unnecessary files and code
+- [x] cleanup unnecessary files and code
 - [ ] add proper setting input

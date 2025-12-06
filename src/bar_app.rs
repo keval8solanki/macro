@@ -3,7 +3,7 @@ use chrono::Local;
 use dirs::document_dir;
 use global_hotkey::GlobalHotKeyEvent;
 use global_hotkey::hotkey::{HotKey, Modifiers, Code};
-use macro_lib::config;
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -616,15 +616,7 @@ pub fn create_hotkeys() -> (HotKey, HotKey) {
 }
 
 fn get_recordings_dir() -> PathBuf {
-    if let Ok(Some(global_config)) = config::load_global_config() {
-         if let Ok(workspace_config) = config::load_workspace_config(&global_config.workspace_path) {
-             workspace_config.path.join("recording")
-         } else {
-             document_dir().unwrap_or(PathBuf::from(".")).join("Macros")
-         }
-    } else {
-        document_dir().unwrap_or(PathBuf::from(".")).join("Macros")
-    }
+    document_dir().unwrap_or(PathBuf::from(".")).join("Macros")
 }
 
 

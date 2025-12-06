@@ -53,35 +53,22 @@ fn main() -> Result<()> {
 
     if let Some(command) = cli.command {
         // CLI / Worker Mode
-        // We still need to load config for direct commands to get keymaps/paths
-        let global_config = config::load_global_config()?;
-        let workspace_config = if let Some(gc) = global_config {
-            config::load_workspace_config(&gc.workspace_path).unwrap_or_else(|_| {
-                config::WorkspaceConfig {
-                    path: std::env::current_dir().unwrap_or_default(),
-                    keymaps: config::KeyMaps::default(),
-                }
-            })
-        } else {
-            config::WorkspaceConfig {
-                path: std::env::current_dir().unwrap_or_default(),
-                keymaps: config::KeyMaps::default(),
-            }
-        };
+        let keymaps = config::KeyMaps::default();
 
         match command {
             Commands::Record { output, immediate } => {
-                // Ensure recording directory exists if we are using relative path
-                let recording_dir = workspace_config.path.join("recording");
-                std::fs::create_dir_all(&recording_dir)?;
-
                 let final_path = if output.is_absolute() {
                     output
                 } else {
-                    recording_dir.join(output)
+                    std::env::current_dir()?.join(output)
                 };
 
-                record::run_record(final_path, workspace_config.keymaps, immediate)?;
+                // Ensure parent directory exists
+                if let Some(parent) = final_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+
+                record::run_record(final_path, keymaps, immediate)?;
             }
             Commands::Play {
                 input,
@@ -89,12 +76,12 @@ fn main() -> Result<()> {
                 repeat_count,
                 immediate,
             } => {
-                play::run_play(input, speed, repeat_count, workspace_config.keymaps, immediate)?;
+                play::run_play(input, speed, repeat_count, keymaps, immediate)?;
             }
         }
     } else {
         // GUI Mode
-        log::info!("Starting macro-bar...");
+        log::info!("Starting Macro...");
 
         let mut event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
         event_loop.set_activation_policy(ActivationPolicy::Accessory);
