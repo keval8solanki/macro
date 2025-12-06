@@ -109,7 +109,7 @@ fn main() -> Result<()> {
             match event {
                 tao::event::Event::UserEvent(app_event) => match app_event {
                     AppEvent::GlobalHotkeyEvent(event) => {
-                        app.handle_hotkey(event);
+                        app.handle_hotkey(event, event_loop);
                     }
                     AppEvent::MenuEvent(event) => {
                         app.handle_menu_event(event, event_loop, control_flow);

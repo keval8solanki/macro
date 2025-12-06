@@ -164,7 +164,11 @@ impl BarApp {
         })
     }
 
-    pub fn handle_hotkey(&mut self, event: GlobalHotKeyEvent) {
+    pub fn handle_hotkey(
+        &mut self,
+        event: GlobalHotKeyEvent,
+        event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
+    ) {
         let mut state = self.state.lock().unwrap();
 
         // Check if this is a press event (state change from not pressed to pressed)
@@ -232,10 +236,7 @@ impl BarApp {
                             .pick_file();
 
                         if let Some(path) = file_handle {
-                             let mut state = self.state.lock().unwrap();
-                             state.pending_playback = Some(path.clone());
-                             drop(state);
-                             self.update_menu_state();
+                             self.handle_file_selected(path, event_loop);
                         }
                     }
                 }
