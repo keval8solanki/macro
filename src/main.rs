@@ -1,14 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use global_hotkey::GlobalHotKeyManager;
 use macro_lib::config;
 use macro_lib::{play, record};
 use std::path::PathBuf;
-use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
 
 mod bar_app;
-use bar_app::{AppEvent, BarApp};
+use bar_app::BarApp;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -94,42 +91,27 @@ fn main() -> Result<()> {
         }
     } else {
         // GUI Mode
-        log::info!("Starting macro-bar...");
+        log::info!("Starting macro-bar (eframe)...");
 
-        let mut event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
-        event_loop.set_activation_policy(ActivationPolicy::Accessory);
+        let options = eframe::NativeOptions {
+             viewport: eframe::egui::ViewportBuilder::default()
+                 .with_visible(false) // Start hidden (tray only initially)
+                 .with_inner_size([400.0, 300.0]),
+             event_loop_builder: Some(Box::new(|builder| {
+                 #[cfg(target_os = "macos")]
+                 {
+                     use winit::platform::macos::EventLoopBuilderExtMacOS;
+                     builder.with_activation_policy(winit::platform::macos::ActivationPolicy::Accessory);
+                 }
+             })),
+             ..Default::default()
+        };
 
-        let proxy = event_loop.create_proxy();
-
-        // Global Hotkey Manager
-        let hotkey_manager = GlobalHotKeyManager::new().unwrap();
-        let (record_hotkey, playback_hotkey) = bar_app::create_hotkeys();
-        hotkey_manager.register(record_hotkey).unwrap();
-        hotkey_manager.register(playback_hotkey).unwrap();
-
-        // Initialize App
-        let mut app = BarApp::new(proxy)?;
-
-        event_loop.run(move |event, _, control_flow| {
-            // Poll every 100ms to check child process status
-            *control_flow = ControlFlow::WaitUntil(std::time::Instant::now() + std::time::Duration::from_millis(100));
-
-            match event {
-                tao::event::Event::UserEvent(app_event) => match app_event {
-                    AppEvent::Hotkey(event) => {
-                        app.handle_hotkey(event);
-                    }
-                    AppEvent::Menu(event) => {
-                        app.handle_menu_event(event, control_flow);
-                    }
-                },
-                tao::event::Event::MainEventsCleared => {
-                    // Check if playback process has finished
-                    app.check_playback_status();
-                }
-                _ => {}
-            }
-        });
+        eframe::run_native(
+            "Macro",
+            options,
+            Box::new(|cc| Ok(Box::new(BarApp::new(cc)))),
+        ).map_err(|e| anyhow::anyhow!("Eframe error: {}", e))?;
     }
 
     Ok(())

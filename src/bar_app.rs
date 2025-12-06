@@ -1,26 +1,18 @@
-use anyhow::Result;
+
 use chrono::Local;
 use dirs::document_dir;
-use global_hotkey::GlobalHotKeyEvent;
+use eframe::egui;
+use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
 use global_hotkey::hotkey::{HotKey, Modifiers, Code};
 use macro_lib::config;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use tao::event_loop::{ControlFlow, EventLoopProxy};
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, Submenu, CheckMenuItem, PredefinedMenuItem};
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIconBuilder, TrayIcon};
-
-
-
-#[derive(Debug)]
-pub enum AppEvent {
-    Menu(MenuEvent),
-    Hotkey(GlobalHotKeyEvent),
-}
-
 pub struct AppState {
     pub is_recording: bool,
     pub recording_process: Option<Child>,
@@ -33,7 +25,11 @@ pub struct AppState {
     pub last_playback_hotkey_pressed: bool,
 }
 
-
+#[derive(PartialEq)]
+enum SettingsTab {
+    Control,
+    Hotkeys,
+}
 
 pub struct BarApp {
     pub state: Arc<Mutex<AppState>>,
@@ -41,12 +37,7 @@ pub struct BarApp {
     pub recording_menu_item: MenuItem,
     pub playback_menu_item: MenuItem,
     pub load_menu_item: MenuItem,
-    pub settings_menu: Submenu,
-    pub speed_05: CheckMenuItem,
-    pub speed_10: CheckMenuItem,
-    pub speed_20: CheckMenuItem,
-    pub repeat_1: CheckMenuItem,
-    pub repeat_inf: CheckMenuItem,
+    pub settings_menu_item: MenuItem,
     pub quit_i: MenuItem,
     pub icon_idle: Icon,
     pub icon_recording: Icon,
@@ -54,10 +45,32 @@ pub struct BarApp {
     pub icon_armed: Icon,
     pub record_hotkey: HotKey,
     pub playback_hotkey: HotKey,
+    // UI State
+    pub show_settings: bool,
+    current_tab: SettingsTab,
+    // Hotkey Manager
+    _hotkey_manager: GlobalHotKeyManager,
+    // System State
+    is_quitting: bool,
+    is_initialized: bool,
 }
 
 impl BarApp {
-    pub fn new(proxy: EventLoopProxy<AppEvent>) -> Result<Self> {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Customize the look and feel
+        let mut style = egui::Style::default();
+        style.visuals = egui::Visuals::dark();
+        style.visuals.window_rounding = egui::Rounding::same(10.0);
+        style.visuals.widgets.noninteractive.rounding = egui::Rounding::same(6.0);
+        style.visuals.widgets.inactive.rounding = egui::Rounding::same(6.0);
+        style.visuals.widgets.hovered.rounding = egui::Rounding::same(6.0);
+        style.visuals.widgets.active.rounding = egui::Rounding::same(6.0);
+        style.visuals.selection.bg_fill = egui::Color32::from_rgb(0, 122, 255); // Mac Blue
+        style.spacing.item_spacing = egui::vec2(10.0, 10.0);
+        style.spacing.window_margin = egui::Margin::same(16.0);
+        
+        cc.egui_ctx.set_style(style);
+
         // Icons
         let icon_idle = create_icon(255, 255, 255, 255); // White
         let icon_recording = create_icon(255, 86, 86, 255); // #FF5656
@@ -72,43 +85,27 @@ impl BarApp {
         let load_menu_item = MenuItem::new("Load", true, None);
         
         // Settings Menu
-        let settings_menu = Submenu::new("Settings", false); // Disabled by default
-        
-        let speed_menu = Submenu::new("Speed", true);
-        let speed_05 = CheckMenuItem::new("0.5x", true, false, None);
-        let speed_10 = CheckMenuItem::new("1.0x", true, true, None); // Default
-        let speed_20 = CheckMenuItem::new("2.0x", true, false, None);
-        speed_menu.append(&speed_05)?;
-        speed_menu.append(&speed_10)?;
-        speed_menu.append(&speed_20)?;
-        
-        let repeat_menu = Submenu::new("Repeat", true);
-        let repeat_1 = CheckMenuItem::new("1x", true, true, None); // Default
-        let repeat_inf = CheckMenuItem::new("Infinite", true, false, None);
-        repeat_menu.append(&repeat_1)?;
-        repeat_menu.append(&repeat_inf)?;
-        
-        settings_menu.append(&speed_menu)?;
-        settings_menu.append(&repeat_menu)?;
+        let settings_menu_item = MenuItem::new("Settings...", true, None); // Disabled by default
 
         let quit_i = MenuItem::new("Quit", true, None);
 
-        tray_menu.append(&app_title_item)?;
-        tray_menu.append(&PredefinedMenuItem::separator())?;
-        tray_menu.append(&recording_menu_item)?;
-        tray_menu.append(&playback_menu_item)?;
-        tray_menu.append(&PredefinedMenuItem::separator())?;
-        tray_menu.append(&load_menu_item)?;
-        tray_menu.append(&settings_menu)?;
-        tray_menu.append(&PredefinedMenuItem::separator())?;
-        tray_menu.append(&quit_i)?;
+        tray_menu.append(&app_title_item).unwrap();
+        tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
+        tray_menu.append(&recording_menu_item).unwrap();
+        tray_menu.append(&playback_menu_item).unwrap();
+        tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
+        tray_menu.append(&load_menu_item).unwrap();
+        tray_menu.append(&settings_menu_item).unwrap();
+        tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
+        tray_menu.append(&quit_i).unwrap();
 
         let tray_icon = Some(
             TrayIconBuilder::new()
                 .with_menu(Box::new(tray_menu.clone()))
                 .with_tooltip("Macro")
                 .with_icon(icon_idle.clone())
-                .build()?,
+                .build()
+                .unwrap(),
         );
 
         // Shared state
@@ -124,36 +121,18 @@ impl BarApp {
             last_playback_hotkey_pressed: false,
         }));
 
-        // Listen for menu events in a separate thread
-        let proxy_menu = proxy.clone();
-        std::thread::spawn(move || {
-            while let Ok(event) = MenuEvent::receiver().recv() {
-                let _ = proxy_menu.send_event(AppEvent::Menu(event));
-            }
-        });
-
-        // Listen for hotkey events in a separate thread
-        let proxy_hotkey = proxy.clone();
-        std::thread::spawn(move || {
-            while let Ok(event) = GlobalHotKeyEvent::receiver().recv() {
-                let _ = proxy_hotkey.send_event(AppEvent::Hotkey(event));
-            }
-        });
-
+        let hotkey_manager = GlobalHotKeyManager::new().unwrap();
         let (record_hotkey, playback_hotkey) = create_hotkeys();
+        hotkey_manager.register(record_hotkey).unwrap();
+        hotkey_manager.register(playback_hotkey).unwrap();
 
-        Ok(Self {
+        Self {
             state,
             tray_icon,
             recording_menu_item,
             playback_menu_item,
             load_menu_item,
-            settings_menu,
-            speed_05,
-            speed_10,
-            speed_20,
-            repeat_1,
-            repeat_inf,
+            settings_menu_item,
             quit_i,
             icon_idle,
             icon_recording,
@@ -161,7 +140,12 @@ impl BarApp {
             icon_armed,
             record_hotkey,
             playback_hotkey,
-        })
+            show_settings: false,
+            current_tab: SettingsTab::Control,
+            _hotkey_manager: hotkey_manager,
+            is_quitting: false,
+            is_initialized: false,
+        }
     }
 
     pub fn handle_hotkey(&mut self, event: GlobalHotKeyEvent) {
@@ -414,81 +398,60 @@ impl BarApp {
         }
     }
 
-    pub fn handle_menu_event(&mut self, event: MenuEvent, control_flow: &mut ControlFlow) {
-        if event.id == self.quit_i.id() {
-            // Cleanup
-            let mut state = self.state.lock().unwrap();
-            if let Some(mut child) = state.recording_process.take() {
-                let _ = child.kill();
-            }
-            if let Some(mut child) = state.playback_process.take() {
-                let _ = child.kill();
-            }
-            *control_flow = ControlFlow::Exit;
-        } else if event.id == self.recording_menu_item.id() {
-            self.handle_toggle_recording();
-        } else if event.id == self.playback_menu_item.id() {
-            self.handle_toggle_playback();
-        } else if event.id == self.load_menu_item.id() {
-            // Check if we are loading or unloading
-            let mut state = self.state.lock().unwrap();
-            if state.pending_playback.is_some() {
-                // Unload Recording
-                log::info!("Unloading recording...");
-                state.pending_playback = None;
-                drop(state);
-                self.update_menu_state();
-            } else {
-                // Load Recording
-                drop(state);
-                // Open File Picker - run on main thread
-                let recording_dir = get_recordings_dir();
-                
-                log::info!("Opening file picker to load recording...");
-                
-                let file_handle = rfd::FileDialog::new()
-                    .set_directory(&recording_dir)
-                    .add_filter("JSON", &["json"])
-                    .pick_file();
-                
-                if let Some(path) = file_handle {
-                    log::info!("Selected recording: {:?}", path);
-                    self.handle_file_selected(path);
+    pub fn process_menu_events(&mut self, ctx: &egui::Context) {
+        while let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == self.quit_i.id() {
+                // Cleanup
+                let mut state = self.state.lock().unwrap();
+                if let Some(mut child) = state.recording_process.take() {
+                    let _ = child.kill();
                 }
+                if let Some(mut child) = state.playback_process.take() {
+                    let _ = child.kill();
+                }
+                self.is_quitting = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            } else if event.id == self.recording_menu_item.id() {
+                self.handle_toggle_recording();
+            } else if event.id == self.playback_menu_item.id() {
+                self.handle_toggle_playback();
+            } else if event.id == self.load_menu_item.id() {
+                // Check if we are loading or unloading
+                // Lock state briefly
+                let is_loaded = {
+                    let state = self.state.lock().unwrap();
+                    state.pending_playback.is_some()
+                };
+
+                if is_loaded {
+                    // Unload Recording
+                    let mut state = self.state.lock().unwrap();
+                    log::info!("Unloading recording...");
+                    state.pending_playback = None;
+                    drop(state);
+                    self.update_menu_state();
+                } else {
+                    // Load Recording
+                    // Open File Picker - run on main thread
+                    let recording_dir = get_recordings_dir();
+                    
+                    log::info!("Opening file picker to load recording...");
+                    
+                    let file_handle = rfd::FileDialog::new()
+                        .set_directory(&recording_dir)
+                        .add_filter("JSON", &["json"])
+                        .pick_file();
+                    
+                    if let Some(path) = file_handle {
+                        log::info!("Selected recording: {:?}", path);
+                        self.handle_file_selected(path);
+                    }
+                }
+            } else if event.id == self.settings_menu_item.id() {
+                self.show_settings = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
-        } else if event.id == self.speed_05.id() {
-            let mut state = self.state.lock().unwrap();
-            state.playback_speed = 0.5;
-            drop(state);
-            let _ = self.speed_05.set_checked(true);
-            let _ = self.speed_10.set_checked(false);
-            let _ = self.speed_20.set_checked(false);
-        } else if event.id == self.speed_10.id() {
-            let mut state = self.state.lock().unwrap();
-            state.playback_speed = 1.0;
-            drop(state);
-            let _ = self.speed_05.set_checked(false);
-            let _ = self.speed_10.set_checked(true);
-            let _ = self.speed_20.set_checked(false);
-        } else if event.id == self.speed_20.id() {
-            let mut state = self.state.lock().unwrap();
-            state.playback_speed = 2.0;
-            drop(state);
-            let _ = self.speed_05.set_checked(false);
-            let _ = self.speed_10.set_checked(false);
-            let _ = self.speed_20.set_checked(true);
-        } else if event.id == self.repeat_1.id() {
-            let mut state = self.state.lock().unwrap();
-            state.repeat_count = 1;
-            drop(state);
-            let _ = self.repeat_1.set_checked(true);
-            let _ = self.repeat_inf.set_checked(false);
-        } else if event.id == self.repeat_inf.id() {
-            let mut state = self.state.lock().unwrap();
-            state.repeat_count = 0; // 0 means infinite
-            drop(state);
-            let _ = self.repeat_1.set_checked(false);
-            let _ = self.repeat_inf.set_checked(true);
         }
     }
 
@@ -535,7 +498,8 @@ impl BarApp {
             let _ = self.load_menu_item.set_text("Load");
             let _ = self.load_menu_item.set_enabled(false);
             
-            let _ = self.settings_menu.set_enabled(false);
+            // Settings always enabled now, or disabled during record? User said "enabled all the time"
+            let _ = self.settings_menu_item.set_enabled(true);
             
             if let Some(tray) = &mut self.tray_icon {
                 let _ = tray.set_icon(Some(self.icon_recording.clone()));
@@ -551,7 +515,7 @@ impl BarApp {
             let _ = self.load_menu_item.set_text("Load");
             let _ = self.load_menu_item.set_enabled(false);
             
-            let _ = self.settings_menu.set_enabled(false);
+            let _ = self.settings_menu_item.set_enabled(true);
             
             if let Some(tray) = &mut self.tray_icon {
                 let _ = tray.set_icon(Some(self.icon_playing.clone()));
@@ -567,7 +531,7 @@ impl BarApp {
             let _ = self.load_menu_item.set_text("Unload");
             let _ = self.load_menu_item.set_enabled(true);
             
-            let _ = self.settings_menu.set_enabled(true);
+            let _ = self.settings_menu_item.set_enabled(true);
             
             if let Some(tray) = &mut self.tray_icon {
                 let _ = tray.set_icon(Some(self.icon_armed.clone()));
@@ -583,12 +547,110 @@ impl BarApp {
             let _ = self.load_menu_item.set_text("Load");
             let _ = self.load_menu_item.set_enabled(true);
             
-            let _ = self.settings_menu.set_enabled(false);
+            let _ = self.settings_menu_item.set_enabled(true);
             
             if let Some(tray) = &mut self.tray_icon {
                 let _ = tray.set_icon(Some(self.icon_idle.clone()));
             }
         }
+    }
+}
+
+impl eframe::App for BarApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll events
+        self.process_menu_events(ctx);
+        
+        while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
+             self.handle_hotkey(event);
+        }
+
+        self.check_playback_status();
+        
+        // Handle window close request
+        if ctx.input(|i| i.viewport().close_requested()) && !self.is_quitting {
+            self.show_settings = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+        
+        // Force hide on first frame
+        if !self.is_initialized {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.is_initialized = true;
+        }
+
+        if self.show_settings {
+             egui::CentralPanel::default().show(ctx, |ui| {
+                 ui.add_space(10.0);
+                 ui.heading("Settings");
+                 ui.add_space(15.0);
+
+                 // Tabs as buttons with better styling
+                 ui.horizontal(|ui| {
+                     let control_btn = ui.selectable_label(self.current_tab == SettingsTab::Control, "Control");
+                     if control_btn.clicked() { self.current_tab = SettingsTab::Control; }
+                     
+                     let hotkeys_btn = ui.selectable_label(self.current_tab == SettingsTab::Hotkeys, "Hotkeys");
+                     if hotkeys_btn.clicked() { self.current_tab = SettingsTab::Hotkeys; }
+                 });
+                 ui.separator();
+                 ui.add_space(10.0);
+                 
+                 match self.current_tab {
+                     SettingsTab::Control => {
+                         let mut state = self.state.lock().unwrap();
+                         
+                         // Group: Playback Speed
+                         egui::Grid::new("control_grid").num_columns(2).spacing([40.0, 20.0]).striped(true).show(ui, |ui| {
+                             ui.label(egui::RichText::new("Playback Speed").strong());
+                             ui.vertical(|ui| {
+                                 ui.add(egui::Slider::new(&mut state.playback_speed, 0.1..=5.0).text("x").logarithmic(true));
+                                 ui.horizontal(|ui| {
+                                     if ui.small_button("0.5x").clicked() { state.playback_speed = 0.5; }
+                                     if ui.small_button("1.0x").clicked() { state.playback_speed = 1.0; }
+                                     if ui.small_button("2.0x").clicked() { state.playback_speed = 2.0; }
+                                 });
+                             });
+                             ui.end_row();
+
+                             ui.label(egui::RichText::new("Repeat Count").strong());
+                             ui.vertical(|ui| {
+                                let mut infinite = state.repeat_count == 0;
+                                if ui.checkbox(&mut infinite, "Infinite Loop").changed() {
+                                    if infinite { state.repeat_count = 0; } else { state.repeat_count = 1; }
+                                }
+                                
+                                if !infinite {
+                                    ui.add(egui::DragValue::new(&mut state.repeat_count).speed(1).range(1..=100));
+                                }
+                             });
+                             ui.end_row();
+                         });
+                     }
+                     SettingsTab::Hotkeys => {
+                         ui.label(egui::RichText::new("Actions & Hotkeys").strong().size(16.0));
+                         ui.add_space(10.0);
+                         
+                         egui::Grid::new("hotkey_grid").num_columns(2).spacing([40.0, 10.0]).striped(true).show(ui, |ui| {
+                             ui.label("Record / Stop");
+                             ui.label(egui::RichText::new("Cmd + Shift + 1").code());
+                             ui.end_row();
+                             
+                             ui.label("Play / Stop");
+                             ui.label(egui::RichText::new("Cmd + Shift + 2").code());
+                             ui.end_row();
+                         });
+                         
+                         ui.add_space(20.0);
+                         ui.label(egui::RichText::new("Note: Hotkeys are currently fixed.").italics().weak());
+                     }
+                 }
+             });
+        }
+        
+        // Repaint periodically to poll events
+        ctx.request_repaint_after(Duration::from_millis(100));
     }
 }
 
