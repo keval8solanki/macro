@@ -77,25 +77,37 @@ EOF
 echo "App bundle created at $APP_DIR"
 
 echo "Signing app..."
-# Ad-hoc signing to prevent "Damaged" error
-if [ -z "$SIGNING_IDENTITY" ]; then
-    # Try to auto-detect identity (e.g. Mac OS Certificate)
-    # Using '|| true' to prevent script exit if grep fails
-    SIGNING_IDENTITY=$(security find-identity -v -p codesigning | grep '"' | head -1 | awk -F '"' '{print $2}' || true)
-    if [ -n "$SIGNING_IDENTITY" ]; then
-        echo "Auto-detected Identity: $SIGNING_IDENTITY"
-    else
-         echo "No signing identity found. Using ad-hoc signing."
-    fi
-fi
 
+# If SIGNING_IDENTITY is provided (e.g. from CI), use it.
 if [ -n "$SIGNING_IDENTITY" ]; then
-    echo "Signing with identity: $SIGNING_IDENTITY"
-    codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" "$APP_DIR" || { echo "Signing failed"; exit 1; }
+    echo "Using provided Identity: $SIGNING_IDENTITY"
+    codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" "$APP_DIR" || { echo "::error::Signing failed!"; exit 1; }
+    
+    # Verify signature
+    echo "Verifying signature..."
+    codesign --verify --deep --strict --verbose=2 "$APP_DIR" || { echo "::error::Signature verification failed!"; exit 1; }
+    echo "Signature verified."
+
 else
-    echo "Warning: No signing identity found, using ad-hoc signing."
-    echo "       (Apps signed ad-hoc will lose permissions on update)"
-    codesign --force --deep --sign - "$APP_DIR"
+    # Fallback / Local Dev Logic
+    
+    # Try to auto-detect identity if not provided
+    DETECTED_IDENTITY=$(security find-identity -v -p codesigning | grep '"' | head -1 | awk -F '"' '{print $2}' || true)
+    
+    if [ -n "$DETECTED_IDENTITY" ]; then
+        echo "Auto-detected Identity: $DETECTED_IDENTITY"
+        codesign --force --deep --options runtime --sign "$DETECTED_IDENTITY" "$APP_DIR" || { echo "Signing failed"; exit 1; }
+    else
+        echo "Warning: No signing identity found."
+        
+        # In CI, we should probably fail if we expected to sign but couldn't
+        if [ "$CI" = "true" ]; then
+             echo "::warning::Running in CI but no signing identity found. Releasing ad-hoc signed app (Permissions will be lost on update)."
+        fi
+        
+        echo "Using ad-hoc signing."
+        codesign --force --deep --sign - "$APP_DIR"
+    fi
 fi
 
 echo "Creating DMG..."
