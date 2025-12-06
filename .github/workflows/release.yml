@@ -39,11 +39,6 @@ jobs:
           # Import certificate
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "${{ secrets.MACOS_CERTIFICATE_PWD }}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
-          
-          # pass identity to bundle script
-          # Extract identity
-          export SIGNING_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | sed -e 's/^.*"//' -e 's/".*$//')
-          echo "Detected Signing Identity: $SIGNING_IDENTITY"
         fi
 
         ./bundle.sh

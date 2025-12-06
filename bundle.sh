@@ -72,6 +72,17 @@ echo "App bundle created at $APP_DIR"
 
 echo "Signing app..."
 # Ad-hoc signing to prevent "Damaged" error
+if [ -z "$SIGNING_IDENTITY" ]; then
+    # Try to auto-detect identity (e.g. Mac OS Certificate)
+    # Using '|| true' to prevent script exit if grep fails
+    SIGNING_IDENTITY=$(security find-identity -v -p codesigning | grep '"' | head -1 | sed -e 's/^.*"//' -e 's/".*$//' || true)
+    if [ -n "$SIGNING_IDENTITY" ]; then
+        echo "Auto-detected Identity: $SIGNING_IDENTITY"
+    else
+         echo "No signing identity found. Using ad-hoc signing."
+    fi
+fi
+
 if [ -n "$SIGNING_IDENTITY" ]; then
     echo "Signing with identity: $SIGNING_IDENTITY"
     codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" "$APP_DIR" || { echo "Signing failed"; exit 1; }
