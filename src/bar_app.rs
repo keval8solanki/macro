@@ -13,6 +13,7 @@ use tao::event_loop::{ControlFlow, EventLoopProxy};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, Submenu, CheckMenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIconBuilder, TrayIcon};
 
+use self_update::cargo_crate_version;
 
 
 #[derive(Debug)]
@@ -54,6 +55,7 @@ pub struct BarApp {
     pub icon_armed: Icon,
     pub record_hotkey: HotKey,
     pub playback_hotkey: HotKey,
+    pub check_updates_item: MenuItem,
 }
 
 impl BarApp {
@@ -92,6 +94,7 @@ impl BarApp {
         settings_menu.append(&repeat_menu)?;
 
         let quit_i = MenuItem::new("Quit", true, None);
+        let check_updates_item = MenuItem::new("Check for Updates...", true, None);
 
         tray_menu.append(&app_title_item)?;
         tray_menu.append(&PredefinedMenuItem::separator())?;
@@ -101,6 +104,7 @@ impl BarApp {
         tray_menu.append(&load_menu_item)?;
         tray_menu.append(&settings_menu)?;
         tray_menu.append(&PredefinedMenuItem::separator())?;
+        tray_menu.append(&check_updates_item)?;
         tray_menu.append(&quit_i)?;
 
         let tray_icon = Some(
@@ -161,6 +165,7 @@ impl BarApp {
             icon_armed,
             record_hotkey,
             playback_hotkey,
+            check_updates_item,
         })
     }
 
@@ -489,6 +494,10 @@ impl BarApp {
             drop(state);
             let _ = self.repeat_1.set_checked(false);
             let _ = self.repeat_inf.set_checked(true);
+        } else if event.id == self.check_updates_item.id() {
+             std::thread::spawn(|| {
+                 check_and_update();
+             });
         }
     }
 
@@ -650,4 +659,74 @@ fn create_icon(r: u8, g: u8, b: u8, a: u8) -> Icon {
         }
     }
     Icon::from_rgba(rgba, width, height).expect("Failed to create icon")
+}
+
+fn check_and_update() {
+    log::info!("Checking for updates...");
+    
+    let status = self_update::backends::github::Update::configure()
+        .repo_owner("keval8solanki")
+        .repo_name("macro")
+        .bin_name("macro")
+        .target("macos") 
+        .show_download_progress(true)
+        .current_version(cargo_crate_version!())
+        .build();
+
+    let updater = match status {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("Failed to configure update: {}", e);
+             rfd::MessageDialog::new()
+                .set_title("Update Error")
+                .set_description(&format!("Failed to configure update: {}", e))
+                .show();
+            return;
+        }
+    };
+    
+    match updater.get_latest_release() {
+        Ok(release) => {
+             let latest_version = release.version;
+             let current_version = cargo_crate_version!();
+             
+             if self_update::version::bump_is_greater(current_version, &latest_version).unwrap_or(false) {
+                 let confirm = rfd::MessageDialog::new()
+                    .set_title("Update Available")
+                    .set_description(&format!("New version {} is available (current: {}).\nUpdate now?", latest_version, current_version))
+                    .set_buttons(rfd::MessageButtons::YesNo)
+                    .show();
+                    
+                 if confirm == rfd::MessageDialogResult::Yes {
+                     // Perform update
+                     match updater.update() {
+                         Ok(_) => {
+                             rfd::MessageDialog::new()
+                                .set_title("Update Successful")
+                                .set_description("Application updated successfully. Please restart the application.")
+                                .show();
+                         }
+                         Err(e) => {
+                             rfd::MessageDialog::new()
+                                .set_title("Update Failed")
+                                .set_description(&format!("Failed to update: {}", e))
+                                .show();
+                         }
+                     }
+                 }
+             } else {
+                 rfd::MessageDialog::new()
+                    .set_title("No Update")
+                    .set_description("You are on the latest version.")
+                    .show();
+             }
+        }
+        Err(e) => {
+            log::error!("Failed to check for updates: {}", e);
+            rfd::MessageDialog::new()
+                .set_title("Update Check Failed")
+                .set_description(&format!("Failed to check for updates: {}", e))
+                .show();
+        }
+    }
 }
