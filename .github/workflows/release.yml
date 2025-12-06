@@ -41,7 +41,9 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
           
           # pass identity to bundle script
-          export SIGNING_IDENTITY="Macro Self-Signed Cert"
+          # Extract identity
+          export SIGNING_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | sed -e 's/^.*"//' -e 's/".*$//')
+          echo "Detected Signing Identity: $SIGNING_IDENTITY"
         fi
 
         ./bundle.sh
