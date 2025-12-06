@@ -7,6 +7,12 @@ CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
+echo "Building Settings UI..."
+cd settings-ui
+npm install
+npm run build
+cd ..
+
 echo "Building binaries..."
 cargo build --release
 

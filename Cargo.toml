@@ -1,6 +1,6 @@
 [package]
 name = "macro"
-version = "1.0.8"
+version = "0.0.4"
 edition = "2024"
 
 [lib]
@@ -26,3 +26,4 @@ dirs = "6.0.0"
 global-hotkey = "0.5.0"
 ctrlc = "3.4"
 self_update = { version = "0.41", features = ["archive-tar", "compression-flate2"] }
+wry = { version = "0.53.5", features = ["protocol", "devtools"] }
