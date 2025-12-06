@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-latest
+    environment: release
     
     steps:
     - uses: actions/checkout@v4
@@ -23,6 +24,14 @@ jobs:
         chmod +x bundle.sh
         
         # Import Certificate
+        # Debug: Check if secrets are available
+        if [ -n "${{ secrets.MACOS_CERTIFICATE }}" ]; then
+          echo "MACOS_CERTIFICATE secret is present."
+        else
+          echo "::warning::MACOS_CERTIFICATE secret is MISSING. App will be ad-hoc signed."
+        fi
+
+        # Import Certificate Logic
         if [ -n "${{ secrets.MACOS_CERTIFICATE }}" ]; then
           echo "Setting up keychain..."
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
@@ -31,29 +40,41 @@ jobs:
           # Decode certificate
           echo "${{ secrets.MACOS_CERTIFICATE }}" | base64 --decode -o $CERTIFICATE_PATH
           
-          # Create temporary keychain
+          # Create and configure temporary keychain
           security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
           security set-keychain-settings -t 3600 -u $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH
+          security list-keychains -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | sed 's/"//g')
           
-          # Import certificate
+          # Import certificate to keychain
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "${{ secrets.MACOS_CERTIFICATE_PWD }}" -T /usr/bin/codesign
+          
+          # Prevent UI permission popups
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
           
           # Find the identity we just imported
-          IDENTITY_OUTPUT=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | awk -F '"' '{print $2}' || true)
+          # We look for the first valid identity in the keychain we just created
+          IDENTITY_OUTPUT=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | awk -F '"' '{print $2}')
+          
           if [ -z "$IDENTITY_OUTPUT" ]; then
-            echo "Error: Certificate imported but no identity found."
-            security find-identity -v -p codesigning $KEYCHAIN_PATH
+            echo "::warning::No valid identity found. Checking for ANY identity (e.g. self-signed)..."
+            IDENTITY_OUTPUT=$(security find-identity -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | awk -F '"' '{print $2}')
+          fi
+
+          if [ -z "$IDENTITY_OUTPUT" ]; then
+            echo "::error::Certificate imported but no identity found in keychain."
+            security find-identity -p codesigning $KEYCHAIN_PATH
             exit 1
           fi
-          echo "Found identity: $IDENTITY_OUTPUT"
+          
+          echo "Found Signing Identity: $IDENTITY_OUTPUT"
           echo "SIGNING_IDENTITY=$IDENTITY_OUTPUT" >> $GITHUB_ENV
           export SIGNING_IDENTITY=$IDENTITY_OUTPUT
         fi
 
         ./bundle.sh
-        tar -C target/release -cvzf macro-macos.tar.gz macro
+        # Package the SIGNED binary from inside the app bundle
+        # This ensures the updater gets a binary with the same signature
+        tar -cvzf macro-macos.tar.gz -C Macro.app/Contents/MacOS macro
 
     - name: Create Release
       uses: softprops/action-gh-release@v1

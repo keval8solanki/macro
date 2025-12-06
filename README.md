@@ -2,7 +2,7 @@
   <img src="assets/icon.png" width="128" height="128" alt="Macro Logo">
 </p>
 
-# Macro Recorder
+# Macro
 
 A simple yet powerful macro recorder for macOS, built with Rust.
 
