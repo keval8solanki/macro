@@ -12,7 +12,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 use std::env;
 
-pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: KeyMaps, immediate: bool) -> Result<()> {
+pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, repeat_interval: f64, keymaps: KeyMaps, immediate: bool) -> Result<()> {
     log::info!("Preparing to play back from {:?}...", input_path);
     
     // Load events first to ensure file exists and is valid
@@ -28,6 +28,9 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
     } else if repeat_count > 1 {
         log::info!("Repeat: {} times", repeat_count);
     }
+    if repeat_interval > 0.0 {
+        log::info!("Repeat Interval: {:.2}s", repeat_interval);
+    }
 
     if immediate {
         log::info!("Starting playback immediately...");
@@ -40,7 +43,7 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
         let events_for_thread = events.clone();
         let stop_flag_play = stop_flag.clone();
         thread::spawn(move || {
-            do_playback(&events_for_thread, speed, repeat_count, stop_flag_play);
+            do_playback(&events_for_thread, speed, repeat_count, repeat_interval, stop_flag_play);
             std::process::exit(0);
         });
 
@@ -169,6 +172,8 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
                         .arg(speed.to_string())
                         .arg("--repeat-count")
                         .arg(repeat_count.to_string())
+                        .arg("--repeat-interval")
+                        .arg(repeat_interval.to_string())
                         .arg("--immediate")
                         .exec();
 
@@ -188,12 +193,28 @@ pub fn run_play(input_path: PathBuf, speed: f64, repeat_count: u32, keymaps: Key
     }
 }
 
-pub fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32, stop_flag: Arc<std::sync::atomic::AtomicBool>) {
+pub fn do_playback(events: &[SerializableEvent], speed: f64, repeat_count: u32, repeat_interval: f64, stop_flag: Arc<std::sync::atomic::AtomicBool>) {
     let mut count = 0;
     loop {
         if repeat_count > 0 && count >= repeat_count {
             break;
         }
+        
+        // Wait interval if not first run
+        if count > 0 && repeat_interval > 0.0 {
+            log::info!("Waiting {:.2}s before next repeat...", repeat_interval);
+             // Check stop flag periodically during long wait
+             let wait_duration = Duration::from_secs_f64(repeat_interval);
+             let start_wait = std::time::Instant::now();
+             while start_wait.elapsed() < wait_duration {
+                 if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                     log::info!("Playback stopped by user during interval.");
+                     return;
+                 }
+                 thread::sleep(Duration::from_millis(50));
+             }
+        }
+
         if count > 0 {
              log::info!("Repeat #{}", count + 1);
         }

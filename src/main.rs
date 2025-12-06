@@ -39,6 +39,9 @@ enum Commands {
         /// Number of times to repeat playback (0 for infinite)
         #[arg(long, default_value_t = 1)]
         repeat_count: u32,
+        /// Interval between repeats in seconds
+        #[arg(long, default_value_t = 0.0)]
+        repeat_interval: f64,
         /// Internal flag to start playback immediately without waiting for hotkey
         #[arg(long, default_value_t = false, hide = true)]
         immediate: bool,
@@ -74,9 +77,10 @@ fn main() -> Result<()> {
                 input,
                 speed,
                 repeat_count,
+                repeat_interval,
                 immediate,
             } => {
-                play::run_play(input, speed, repeat_count, keymaps, immediate)?;
+                play::run_play(input, speed, repeat_count, repeat_interval, keymaps, immediate)?;
             }
         }
     } else {
@@ -97,19 +101,25 @@ fn main() -> Result<()> {
         // Initialize App
         let mut app = BarApp::new(proxy)?;
 
-        event_loop.run(move |event, _, control_flow| {
+        event_loop.run(move |event, event_loop, control_flow| {
             // Poll every 100ms to check child process status
             *control_flow = ControlFlow::WaitUntil(std::time::Instant::now() + std::time::Duration::from_millis(100));
 
             match event {
                 tao::event::Event::UserEvent(app_event) => match app_event {
-                    AppEvent::Hotkey(event) => {
+                    AppEvent::GlobalHotkeyEvent(event) => {
                         app.handle_hotkey(event);
                     }
-                    AppEvent::Menu(event) => {
-                        app.handle_menu_event(event, control_flow);
+                    AppEvent::MenuEvent(event) => {
+                        app.handle_menu_event(event, event_loop, control_flow);
+                    }
+                    AppEvent::SettingsApplied(settings) => {
+                        app.handle_settings_applied(settings);
                     }
                 },
+                tao::event::Event::WindowEvent { event: tao::event::WindowEvent::CloseRequested, .. } => {
+                    app.handle_window_close();
+                }
                 tao::event::Event::MainEventsCleared => {
                     // Check if playback process has finished
                     app.check_playback_status();
