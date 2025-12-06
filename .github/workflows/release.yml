@@ -43,7 +43,7 @@ jobs:
           # Create and configure temporary keychain
           security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
           security set-keychain-settings -t 3600 -u $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH
+          security list-keychains -d user -s $KEYCHAIN_PATH $(security list-keychains -d user | sed 's/"//g')
           
           # Import certificate to keychain
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "${{ secrets.MACOS_CERTIFICATE_PWD }}" -T /usr/bin/codesign
@@ -56,8 +56,13 @@ jobs:
           IDENTITY_OUTPUT=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | head -1 | grep '"' | awk -F '"' '{print $2}')
           
           if [ -z "$IDENTITY_OUTPUT" ]; then
-            echo "::error::Certificate imported but no valid identity found in keychain."
-            security find-identity -v -p codesigning $KEYCHAIN_PATH
+            echo "::warning::No valid identity found. Checking for ANY identity (e.g. self-signed)..."
+            IDENTITY_OUTPUT=$(security find-identity -p codesigning $KEYCHAIN_PATH | head -1 | grep '"' | awk -F '"' '{print $2}')
+          fi
+
+          if [ -z "$IDENTITY_OUTPUT" ]; then
+            echo "::error::Certificate imported but no identity found in keychain."
+            security find-identity -p codesigning $KEYCHAIN_PATH
             exit 1
           fi
           
