@@ -75,7 +75,7 @@ echo "Signing app..."
 if [ -z "$SIGNING_IDENTITY" ]; then
     # Try to auto-detect identity (e.g. Mac OS Certificate)
     # Using '|| true' to prevent script exit if grep fails
-    SIGNING_IDENTITY=$(security find-identity -v -p codesigning | grep '"' | head -1 | sed -e 's/^.*"//' -e 's/".*$//' || true)
+    SIGNING_IDENTITY=$(security find-identity -v -p codesigning | grep '"' | head -1 | awk -F '"' '{print $2}' || true)
     if [ -n "$SIGNING_IDENTITY" ]; then
         echo "Auto-detected Identity: $SIGNING_IDENTITY"
     else

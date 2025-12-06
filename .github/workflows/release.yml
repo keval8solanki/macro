@@ -39,6 +39,16 @@ jobs:
           # Import certificate
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "${{ secrets.MACOS_CERTIFICATE_PWD }}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
+          
+          # Find the identity we just imported
+          IDENTITY_OUTPUT=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep '"' | head -1 | awk -F '"' '{print $2}' || true)
+          if [ -z "$IDENTITY_OUTPUT" ]; then
+            echo "Error: Certificate imported but no identity found."
+            security find-identity -v -p codesigning $KEYCHAIN_PATH
+            exit 1
+          fi
+          echo "Found identity: $IDENTITY_OUTPUT"
+          echo "SIGNING_IDENTITY=$IDENTITY_OUTPUT" >> $GITHUB_ENV
         fi
 
         ./bundle.sh
