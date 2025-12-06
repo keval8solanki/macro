@@ -36,6 +36,7 @@ pub struct AppState {
     pub current_recording_path: Option<PathBuf>,
     pub last_record_hotkey_pressed: bool,
     pub last_playback_hotkey_pressed: bool,
+    pub last_load_hotkey_pressed: bool,
 }
 
 pub struct BarApp {
@@ -53,6 +54,7 @@ pub struct BarApp {
     pub icon_armed: Icon,
     pub record_hotkey: HotKey,
     pub playback_hotkey: HotKey,
+    pub load_hotkey: HotKey,
     pub check_updates_item: MenuItem,
     pub settings_window: Option<Window>,
     pub settings_webview: Option<WebView>,
@@ -120,6 +122,7 @@ impl BarApp {
             current_recording_path: None,
             last_record_hotkey_pressed: false,
             last_playback_hotkey_pressed: false,
+            last_load_hotkey_pressed: false,
         }));
 
         // Listen for menu and hotkey events in a separate thread (or just setup handlers)
@@ -137,7 +140,7 @@ impl BarApp {
             }));
         });
 
-        let (record_hotkey, playback_hotkey) = create_hotkeys();
+        let (record_hotkey, playback_hotkey, load_hotkey) = create_hotkeys();
 
         Ok(Self {
             state,
@@ -154,6 +157,7 @@ impl BarApp {
             icon_armed,
             record_hotkey,
             playback_hotkey,
+            load_hotkey,
             check_updates_item,
             settings_window: None,
             settings_webview: None,
@@ -171,8 +175,17 @@ impl BarApp {
             // Only trigger on press event (transition from not pressed to pressed)
             if is_pressed && !state.last_record_hotkey_pressed {
                 state.last_record_hotkey_pressed = true;
-                drop(state); // Release lock before calling handler
-                self.handle_toggle_recording();
+                
+                // CONSTRAINT: Do not allow recording if a recording is loaded
+                if state.pending_playback.is_some() {
+                    log::warn!("HotKey: Cannot start recording while a recording is loaded.");
+                    // We don't drop state here because we continue to update last_record_hotkey_pressed
+                } else {
+                    drop(state); // Release lock before calling handler
+                    self.handle_toggle_recording();
+                    // Re-acquire lock to update state if needed (not needed for local vars)
+                    return; 
+                }
             } else if !is_pressed {
                 state.last_record_hotkey_pressed = false;
             }
@@ -186,6 +199,49 @@ impl BarApp {
                 self.handle_toggle_playback();
             } else if !is_pressed {
                 state.last_playback_hotkey_pressed = false;
+            }
+        } else if event.id == self.load_hotkey.id() {
+            let is_pressed = event.state == global_hotkey::HotKeyState::Pressed;
+
+            if is_pressed && !state.last_load_hotkey_pressed {
+                state.last_load_hotkey_pressed = true;
+                
+                // CONSTRAINT: Do not allow loading if we are recording
+                if state.is_recording {
+                     log::warn!("HotKey: Cannot load recording while recording is active.");
+                } else {
+                    // Logic for load/unload
+                    // Check if we have a recording loaded
+                    let has_recording = state.pending_playback.is_some();
+                    drop(state); // Drop lock before doing potential UI/File ops
+
+                    if has_recording {
+                        // Unload
+                        let mut state = self.state.lock().unwrap();
+                        log::info!("HotKey: Unloading recording...");
+                        state.pending_playback = None;
+                        drop(state);
+                        self.update_menu_state();
+                    } else {
+                        // Load
+                        log::info!("HotKey: opening file picker to load recording...");
+                        let recording_dir = get_recordings_dir();
+                        let file_handle = rfd::FileDialog::new()
+                            .set_directory(&recording_dir)
+                            .add_filter("JSON", &["json"])
+                            .pick_file();
+
+                        if let Some(path) = file_handle {
+                             let mut state = self.state.lock().unwrap();
+                             state.pending_playback = Some(path.clone());
+                             drop(state);
+                             self.update_menu_state();
+                        }
+                    }
+                }
+
+            } else if !is_pressed {
+                state.last_load_hotkey_pressed = false;
             }
         }
     }
@@ -660,7 +716,7 @@ impl BarApp {
     }
 }
 
-pub fn create_hotkeys() -> (HotKey, HotKey) {
+pub fn create_hotkeys() -> (HotKey, HotKey, HotKey) {
     let record_hotkey = HotKey::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Digit1);
     // We need to set the ID manually if possible, but HotKey::new generates a random ID or hashes it.
     // Actually GlobalHotKeyManager uses the ID from the HotKey struct.
@@ -670,8 +726,9 @@ pub fn create_hotkeys() -> (HotKey, HotKey) {
     // Ah, `HotKey` implements `PartialEq` and `Hash`. We can store the created hotkeys in `BarApp` and compare `event.id` with `hotkey.id()`.
 
     let playback_hotkey = HotKey::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Digit2);
+    let load_hotkey = HotKey::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Digit0);
 
-    (record_hotkey, playback_hotkey)
+    (record_hotkey, playback_hotkey, load_hotkey)
 }
 
 fn get_recordings_dir() -> PathBuf {

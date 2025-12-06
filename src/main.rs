@@ -94,9 +94,10 @@ fn main() -> Result<()> {
 
         // Global Hotkey Manager
         let hotkey_manager = GlobalHotKeyManager::new().unwrap();
-        let (record_hotkey, playback_hotkey) = bar_app::create_hotkeys();
+        let (record_hotkey, playback_hotkey, load_hotkey) = bar_app::create_hotkeys();
         hotkey_manager.register(record_hotkey).unwrap();
         hotkey_manager.register(playback_hotkey).unwrap();
+        hotkey_manager.register(load_hotkey).unwrap();
 
         // Initialize App
         let mut app = BarApp::new(proxy)?;
