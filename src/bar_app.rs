@@ -63,6 +63,8 @@ pub struct SettingsMessage {
     pub speed: f64,
     pub repeat: u32,
     pub interval: f64,
+    #[serde(default)]
+    pub should_play: bool,
 }
 
 impl BarApp {
@@ -188,12 +190,17 @@ impl BarApp {
         }
     }
 
-    pub fn handle_file_selected(&mut self, path: PathBuf) {
+    pub fn handle_file_selected(
+        &mut self,
+        path: PathBuf,
+        event_loop: &tao::event_loop::EventLoopWindowTarget<AppEvent>,
+    ) {
         let mut state = self.state.lock().unwrap();
         state.pending_playback = Some(path);
         drop(state);
 
         self.update_menu_state();
+        self.open_settings(event_loop);
     }
 
     pub fn handle_toggle_playback(&mut self) {
@@ -424,15 +431,21 @@ impl BarApp {
 
         // Save settings to persistent storage if needed (future improvement)
         log::info!(
-            "Settings applied: Speed={}, Repeat={}, Interval={}",
+            "Settings applied: Speed={}, Repeat={}, Interval={}, ShouldPlay={}",
             settings.speed,
             settings.repeat,
-            settings.interval
+            settings.interval,
+            settings.should_play
         );
 
         // Close window
         self.settings_window = None;
         self.settings_webview = None;
+        drop(state); // Drop lock before calling handle_toggle_playback
+
+        if settings.should_play {
+            self.handle_toggle_playback();
+        }
     }
 
     pub fn handle_window_close(&mut self) {
@@ -535,7 +548,7 @@ impl BarApp {
 
                 if let Some(path) = file_handle {
                     log::info!("Selected recording: {:?}", path);
-                    self.handle_file_selected(path);
+                    self.handle_file_selected(path, event_loop);
                 }
             }
         } else if event.id == self.settings_menu_item.id() {

@@ -23,18 +23,37 @@ function App() {
     }
   }, [form]);
 
-  const onFinish = (values) => {
+  const submitSettings = (values, shouldPlay) => {
     const settings = {
       speed: values.speed,
       repeat: values.repeat,
-      interval: values.interval
+      interval: values.interval,
+      should_play: shouldPlay
     };
 
     if (window.ipc) {
       window.ipc.postMessage(JSON.stringify(settings));
     } else {
       console.log("Settings applied:", settings);
-      message.success("Settings applied (Dev Mode)");
+      message.success(shouldPlay ? "Settings applied & Playing (Dev Mode)" : "Settings applied (Dev Mode)");
+    }
+  };
+
+  const handleApply = async () => {
+    try {
+      const values = await form.validateFields();
+      submitSettings(values, false);
+    } catch (error) {
+      console.error("Validation failed:", error);
+    }
+  };
+
+  const handleApplyAndPlay = async () => {
+    try {
+      const values = await form.validateFields();
+      submitSettings(values, true);
+    } catch (error) {
+      console.error("Validation failed:", error);
     }
   };
 
@@ -94,7 +113,6 @@ function App() {
         <Form
           form={form}
           layout="vertical"
-          onFinish={onFinish}
           initialValues={{ speed: 1.0, repeat: 1, interval: 0 }}
           style={{ height: '100%', display: 'flex', flexDirection: 'column', marginTop: 10 }}
         >
@@ -133,9 +151,21 @@ function App() {
             />
           </Form.Item>
 
-          <div style={{ marginTop: 'auto' }}>
-            <Button type="primary" htmlType="submit" block style={{ color: 'black', fontWeight: 600 }}>
+          <div style={{ marginTop: 'auto', display: 'flex', gap: 8 }}>
+            <Button
+              onClick={handleApply}
+              block
+              style={{ flex: 1, backgroundColor: '#333', color: 'white', border: 'none', fontWeight: 600 }}
+            >
               Apply
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleApplyAndPlay}
+              block
+              style={{ flex: 1, color: 'black', fontWeight: 600 }}
+            >
+              Apply & Play
             </Button>
           </div>
         </Form>
