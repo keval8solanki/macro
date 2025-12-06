@@ -10,7 +10,7 @@ use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 
 use tao::event_loop::{ControlFlow, EventLoopProxy};
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, Submenu, CheckMenuItem};
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, Submenu, CheckMenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIconBuilder, TrayIcon};
 
 
@@ -66,14 +66,15 @@ impl BarApp {
 
         // Menu
         let tray_menu = Menu::new();
-        let recording_menu_item = MenuItem::new("Start Recording", true, None);
-        let playback_menu_item = MenuItem::new("Start Playback", false, None); // Disabled by default
-        let load_menu_item = MenuItem::new("Load Recording", true, None);
+        let app_title_item = MenuItem::new("Macro 1.0.2", false, None);
+        let recording_menu_item = MenuItem::new("Record", true, None);
+        let playback_menu_item = MenuItem::new("Play", false, None); // Disabled by default
+        let load_menu_item = MenuItem::new("Load", true, None);
         
         // Settings Menu
         let settings_menu = Submenu::new("Settings", false); // Disabled by default
         
-        let speed_menu = Submenu::new("Playback Speed", true);
+        let speed_menu = Submenu::new("Speed", true);
         let speed_05 = CheckMenuItem::new("0.5x", true, false, None);
         let speed_10 = CheckMenuItem::new("1.0x", true, true, None); // Default
         let speed_20 = CheckMenuItem::new("2.0x", true, false, None);
@@ -81,7 +82,7 @@ impl BarApp {
         speed_menu.append(&speed_10)?;
         speed_menu.append(&speed_20)?;
         
-        let repeat_menu = Submenu::new("Repeat Count", true);
+        let repeat_menu = Submenu::new("Repeat", true);
         let repeat_1 = CheckMenuItem::new("1x", true, true, None); // Default
         let repeat_inf = CheckMenuItem::new("Infinite", true, false, None);
         repeat_menu.append(&repeat_1)?;
@@ -92,16 +93,20 @@ impl BarApp {
 
         let quit_i = MenuItem::new("Quit", true, None);
 
+        tray_menu.append(&app_title_item)?;
+        tray_menu.append(&PredefinedMenuItem::separator())?;
         tray_menu.append(&recording_menu_item)?;
         tray_menu.append(&playback_menu_item)?;
+        tray_menu.append(&PredefinedMenuItem::separator())?;
         tray_menu.append(&load_menu_item)?;
         tray_menu.append(&settings_menu)?;
+        tray_menu.append(&PredefinedMenuItem::separator())?;
         tray_menu.append(&quit_i)?;
 
         let tray_icon = Some(
             TrayIconBuilder::new()
                 .with_menu(Box::new(tray_menu.clone()))
-                .with_tooltip("Macro Bar")
+                .with_tooltip("Macro")
                 .with_icon(icon_idle.clone())
                 .build()?,
         );
@@ -521,13 +526,13 @@ impl BarApp {
 
         if is_recording {
             // Recording Started
-            let _ = self.recording_menu_item.set_text("Stop Recording");
+            let _ = self.recording_menu_item.set_text("Stop");
             let _ = self.recording_menu_item.set_enabled(true);
             
-            let _ = self.playback_menu_item.set_text("Start Playback");
+            let _ = self.playback_menu_item.set_text("Play");
             let _ = self.playback_menu_item.set_enabled(false);
             
-            let _ = self.load_menu_item.set_text("Load Recording");
+            let _ = self.load_menu_item.set_text("Load");
             let _ = self.load_menu_item.set_enabled(false);
             
             let _ = self.settings_menu.set_enabled(false);
@@ -537,13 +542,13 @@ impl BarApp {
             }
         } else if is_playing {
             // Playback Started
-            let _ = self.recording_menu_item.set_text("Start Recording");
+            let _ = self.recording_menu_item.set_text("Record");
             let _ = self.recording_menu_item.set_enabled(false);
             
-            let _ = self.playback_menu_item.set_text("Stop Playback");
+            let _ = self.playback_menu_item.set_text("Stop");
             let _ = self.playback_menu_item.set_enabled(true);
             
-            let _ = self.load_menu_item.set_text("Load Recording");
+            let _ = self.load_menu_item.set_text("Load");
             let _ = self.load_menu_item.set_enabled(false);
             
             let _ = self.settings_menu.set_enabled(false);
@@ -553,13 +558,13 @@ impl BarApp {
             }
         } else if has_recording {
             // Recording Loaded
-            let _ = self.recording_menu_item.set_text("Start Recording");
+            let _ = self.recording_menu_item.set_text("Record");
             let _ = self.recording_menu_item.set_enabled(false);
             
-            let _ = self.playback_menu_item.set_text("Start Playback");
+            let _ = self.playback_menu_item.set_text("Play");
             let _ = self.playback_menu_item.set_enabled(true);
             
-            let _ = self.load_menu_item.set_text("Unload Recording");
+            let _ = self.load_menu_item.set_text("Unload");
             let _ = self.load_menu_item.set_enabled(true);
             
             let _ = self.settings_menu.set_enabled(true);
@@ -569,13 +574,13 @@ impl BarApp {
             }
         } else {
             // Initial State / Unloaded
-            let _ = self.recording_menu_item.set_text("Start Recording");
+            let _ = self.recording_menu_item.set_text("Record");
             let _ = self.recording_menu_item.set_enabled(true);
             
-            let _ = self.playback_menu_item.set_text("Start Playback");
+            let _ = self.playback_menu_item.set_text("Play");
             let _ = self.playback_menu_item.set_enabled(false);
             
-            let _ = self.load_menu_item.set_text("Load Recording");
+            let _ = self.load_menu_item.set_text("Load");
             let _ = self.load_menu_item.set_enabled(true);
             
             let _ = self.settings_menu.set_enabled(false);
