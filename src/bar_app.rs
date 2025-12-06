@@ -66,7 +66,7 @@ impl BarApp {
 
         // Menu
         let tray_menu = Menu::new();
-        let app_title_item = MenuItem::new("Macro 1.0.2", false, None);
+        let app_title_item = MenuItem::new(concat!("Macro ", env!("CARGO_PKG_VERSION")), false, None);
         let recording_menu_item = MenuItem::new("Record", true, None);
         let playback_menu_item = MenuItem::new("Play", false, None); // Disabled by default
         let load_menu_item = MenuItem::new("Load", true, None);
