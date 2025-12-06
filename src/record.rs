@@ -119,10 +119,7 @@ pub fn run_record(output_path: PathBuf, keymaps: KeyMaps, immediate: bool) -> Re
                  log::info!("Recorded event: {:?}", serializable_event);
                  state.events.push(serializable_event);
                  
-                 // Save immediately to ensure data persistence
-                 if let Err(e) = save_events(&state.events, &output_path_clone) {
-                     log::error!("Failed to save events: {}", e);
-                 }
+                 // serialization removed for performance
              }
         }
     };
