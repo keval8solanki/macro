@@ -21,6 +21,29 @@ jobs:
     - name: Build and Bundle
       run: |
         chmod +x bundle.sh
+        
+        # Import Certificate
+        if [ -n "${{ secrets.MACOS_CERTIFICATE }}" ]; then
+          echo "Setting up keychain..."
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          
+          # Decode certificate
+          echo "${{ secrets.MACOS_CERTIFICATE }}" | base64 --decode -o $CERTIFICATE_PATH
+          
+          # Create temporary keychain
+          security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
+          security set-keychain-settings -t 3600 -u $KEYCHAIN_PATH
+          security list-keychains -d user -s $KEYCHAIN_PATH
+          
+          # Import certificate
+          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "${{ secrets.MACOS_CERTIFICATE_PWD }}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
+          
+          # pass identity to bundle script
+          export SIGNING_IDENTITY="Macro Self-Signed Cert"
+        fi
+
         ./bundle.sh
         tar -C target/release -cvzf macro-macos.tar.gz macro
 

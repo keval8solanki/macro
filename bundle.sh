@@ -72,7 +72,14 @@ echo "App bundle created at $APP_DIR"
 
 echo "Signing app..."
 # Ad-hoc signing to prevent "Damaged" error
-codesign --force --deep --sign - "$APP_DIR" || echo "Warning: Code signing failed"
+if [ -n "$SIGNING_IDENTITY" ]; then
+    echo "Signing with identity: $SIGNING_IDENTITY"
+    codesign --force --deep --options runtime --sign "$SIGNING_IDENTITY" "$APP_DIR" || { echo "Signing failed"; exit 1; }
+else
+    echo "Warning: No signing identity found, using ad-hoc signing."
+    echo "       (Apps signed ad-hoc will lose permissions on update)"
+    codesign --force --deep --sign - "$APP_DIR"
+fi
 
 echo "Creating DMG..."
 DMG_NAME="$APP_NAME.dmg"
