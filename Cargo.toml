@@ -1,6 +1,6 @@
 [package]
 name = "macro"
-version = "1.0.3"
+version = "1.0.4-beta"
 edition = "2024"
 
 [lib]

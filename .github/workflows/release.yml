@@ -32,4 +32,4 @@ jobs:
           Macro.dmg
           macro-macos.tar.gz
         draft: false
-        prerelease: false
+        prerelease: ${{ contains(github.ref, 'beta') }}
